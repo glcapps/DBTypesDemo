@@ -6,7 +6,16 @@
     <title>Databases vs. Application Logic Demo</title>
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/duckdb-wasm@1.20.0"></script>
+    <script type="module">
+        import DuckDB from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-browser.mjs";
+        const DUCKDB_WASM = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm";
+
+        async function initDuckDB() {
+            const bundle = await DuckDB.instantiate(DuckDB.BUNDLES.MVP, DUCKDB_WASM);
+            window.duckDB = await bundle.createDatabase();
+        }
+        initDuckDB();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/pgmock@latest"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -30,14 +39,9 @@
     </div>
     
     <script>
-        let duckDB, pgDB;
+        let pgDB;
         
         async function initDatabases() {
-            // Initialize DuckDB
-            duckDB = new duckdb.AsyncDuckDB();
-            await duckDB.instantiate();
-            await duckDB.open({});
-            
             // Initialize pgMock (full WASM Postgres)
             pgDB = new pgmock.Database();
             await pgDB.query("CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT, age INT);");
@@ -46,8 +50,10 @@
         
         async function runDuckDBQuery() {
             const query = monaco.editor.getModels()[0].getValue();
-            const result = await duckDB.query(query);
+            const conn = await duckDB.connect();
+            const result = await conn.query(query);
             document.getElementById("duckdb-output").textContent = JSON.stringify(result.toArray(), null, 2);
+            conn.close();
         }
         
         async function runPGQuery() {
