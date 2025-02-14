@@ -3,80 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Databases vs. Application Logic Demo</title>
-    <script src="https://unpkg.com/htmx.org@1.9.5"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.js"></script>
-    <script type="module">
-        import DuckDB from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-browser.mjs";
-        const DUCKDB_WASM = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm";
-
-        async function initDuckDB() {
-            const bundle = await DuckDB.instantiate(DuckDB.BUNDLES.MVP, DUCKDB_WASM);
-            window.duckDB = await bundle.createDatabase();
-        }
-        initDuckDB();
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/pgmock@latest"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-900 text-white p-6">
-    <div class="max-w-4xl mx-auto">
-        <h1 class="text-2xl font-bold mb-4">Databases vs. Application Logic: Stop Moving Data and Start Leveraging Your DB</h1>
-        
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
-            <h2 class="text-lg font-semibold mb-2">DuckDB Query</h2>
-            <div id="duckdb-editor" class="h-40 border rounded bg-gray-700"></div>
-            <button class="mt-2 bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded" hx-on:click="runDuckDBQuery()">Run Query</button>
-            <pre id="duckdb-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
-        </div>
-        
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
-            <h2 class="text-lg font-semibold mb-2">PostgreSQL Query (pgMock WASM)</h2>
-            <div id="pg-editor" class="h-40 border rounded bg-gray-700"></div>
-            <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" hx-on:click="runPGQuery()">Run Query</button>
-            <pre id="pg-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
-        </div>
-    </div>
+    <title>SQL Editor with DuckDB-WASM & pgMock</title>
     
-    <script>
-        let pgDB;
+    <!-- Load Dependencies from CDNs -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apache-arrow@19.0.0/Arrow.es2015.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pgmock@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.js"></script>
+</head>
+<body class="bg-gray-100 p-6">
+    <div class="max-w-3xl mx-auto bg-white p-6 shadow-lg rounded-lg">
+        <h1 class="text-2xl font-bold mb-4">SQL Editor</h1>
+        <div id="editor" class="border rounded h-60"></div>
+        <button id="runQuery" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50" disabled>Run Query</button>
+        <pre id="output" class="mt-4 p-2 bg-gray-200 border rounded"></pre>
+    </div>
+
+    <script type="module">
+        import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.26.0/+esm';
         
-        async function initDatabases() {
-            // Initialize pgMock (full WASM Postgres)
-            pgDB = new pgmock.Database();
-            await pgDB.query("CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT, age INT);");
-            await pgDB.query("INSERT INTO users (name, age) VALUES ('Alice', 30), ('Bob', 25);");
+        let db, editor;
+        window.arrow = window.arrow || {};
+        
+        const MANUAL_BUNDLES = {
+            mvp: {
+                mainModule: 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm',
+                mainWorker: 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js',
+            },
+            eh: {
+                mainModule: 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-eh.wasm',
+                mainWorker: 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js',
+            },
+        };
+        
+        async function initDuckDB() {
+            try {
+                const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+                const worker = new Worker(bundle.mainWorker);
+                const logger = new duckdb.ConsoleLogger();
+                db = new duckdb.AsyncDuckDB(logger, worker);
+                await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+                document.getElementById('runQuery').disabled = false;
+            } catch (error) {
+                console.error("DuckDB initialization failed:", error);
+            }
         }
         
-        async function runDuckDBQuery() {
-            const query = monaco.editor.getModels()[0].getValue();
-            const conn = await duckDB.connect();
-            const result = await conn.query(query);
-            document.getElementById("duckdb-output").textContent = JSON.stringify(result.toArray(), null, 2);
-            conn.close();
+        function initMonaco() {
+            const monacoCheck = setInterval(() => {
+                if (window.monaco) {
+                    clearInterval(monacoCheck);
+                    editor = monaco.editor.create(document.getElementById('editor'), {
+                        value: 'SELECT 1;',
+                        language: 'sql',
+                        theme: 'vs-dark'
+                    });
+                }
+            }, 100);
         }
         
-        async function runPGQuery() {
-            const query = monaco.editor.getModels()[1].getValue();
-            const result = await pgDB.query(query);
-            document.getElementById("pg-output").textContent = JSON.stringify(result.rows, null, 2);
-        }
-        
-        require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs" } });
-        require(["vs/editor/editor.main"], function () {
-            monaco.editor.create(document.getElementById("duckdb-editor"), {
-                value: "SELECT 42 AS answer;",
-                language: "sql",
-                theme: "vs-dark"
-            });
-            monaco.editor.create(document.getElementById("pg-editor"), {
-                value: "SELECT * FROM users;",
-                language: "sql",
-                theme: "vs-dark"
-            });
+        document.getElementById('runQuery').addEventListener('click', async () => {
+            if (!db) {
+                document.getElementById('output').textContent = 'Database not initialized';
+                return;
+            }
+            
+            const query = editor.getValue();
+            let result;
+            try {
+                result = await db.query(query);
+            } catch (err) {
+                result = 'Error: ' + err.message;
+            }
+            document.getElementById('output').textContent = JSON.stringify(result, null, 2);
         });
         
-        initDatabases();
+        window.onload = () => {
+            initMonaco();
+            initDuckDB();
+        };
     </script>
 </body>
 </html>
