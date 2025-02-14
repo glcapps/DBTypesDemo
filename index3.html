@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DuckDB-Wasm in Browser</title>
+
+    <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Load all dependencies locally -->
+    <script type="module">
+        import * as arrow from "./apache-arrow-mjs.js";   
+        import * as tslib from "./tslib-mjs.js";         
+        import * as flatbuffers from "./flatbuffers-mjs.js"; 
+        import * as duckdb from "./duckdb-browser-mjs.js";  
+
+        // Ensure global access to dependencies
+        window.arrow = arrow;
+        window.tslib = tslib;
+        window.flatbuffers = flatbuffers;
+        window.duckdb = duckdb;
+        window.duckDBReady = false; // Mark DuckDB as not ready initially
+
+        async function initDuckDB() {
+            console.log("Initializing DuckDB...");
+
+            const MANUAL_BUNDLES = {
+                mvp: {
+                    mainModule: "./duckdb-mvp.wasm",
+                    mainWorker: "./duckdb-browser-mvp.worker.js",
+                },
+            };
+
+            // Select the appropriate bundle
+            const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+            console.log("Bundle Selected:", bundle);
+
+            // Create a worker with the correct path
+            const worker = new Worker(bundle.mainWorker);
+            const logger = new duckdb.ConsoleLogger();
+
+            // Instantiate DuckDB
+            const db = new duckdb.AsyncDuckDB(logger, worker);
+            await db.instantiate(bundle.mainModule);
+
+            console.log("DuckDB Successfully Initialized.");
+            window.duckDB = db; // Store DuckDB globally
+            window.duckDBReady = true; // Mark DuckDB as ready
+        }
+
+        // Wait for DuckDB to initialize before running queries
+        await initDuckDB();
+    </script>
+</head>
+<body class="bg-gray-900 text-white p-6">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-4">DuckDB-Wasm in Browser</h1>
+        
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
+            <h2 class="text-lg font-semibold mb-2">DuckDB Query</h2>
+            <div id="duckdb-editor" class="h-40 border rounded bg-gray-700"></div>
+            <button class="mt-2 bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded" onclick="runDuckDBQuery()">Run Query</button>
+            <pre id="duckdb-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
+        </div>
+    </div>
+
+    <script>
+        let duckDBEditor;
+
+        async function runDuckDBQuery() {
+            if (!window.duckDBReady) {
+                document.getElementById("duckdb-output").textContent = "Error: DuckDB not initialized. Please wait...";
+                return;
+            }
+
+            const query = duckDBEditor.getValue();
+            try {
+                const conn = await window.duckDB.connect();
+                const result = await conn.query(query);
+                document.getElementById("duckdb-output").textContent = JSON.stringify(result.toArray(), null, 2);
+                conn.close();
+            } catch (error) {
+                document.getElementById("duckdb-output").textContent = "Error: " + error.message;
+            }
+        }
+
+        require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs" } });
+        require(["vs/editor/editor.main"], function () {
+            duckDBEditor = monaco.editor.create(document.getElementById("duckdb-editor"), {
+                value: "SELECT * FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet' LIMIT 100;",
+                language: "sql",
+                theme: "vs-dark"
+            });
+        });
+    </script>
+</body>
+</html>
