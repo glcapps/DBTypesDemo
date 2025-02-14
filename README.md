@@ -2,3 +2,4 @@
 ## Start Leveraging Your DB
 Many developers still offload data processing to their applications, missing out on the power and efficiency databases provide. Whether it's SQL for complex queries, document databases for flexible data models, or vector databases for specialized searches, modern databases are built to handle computation at scale. By leveraging database capabilities, developers can reduce application overhead, enhance performance, and streamline architecture. With new tools making advanced queries and schema design more accessible, it's now easier than ever to maximize database efficiency. This talk explores how different database types integrate into modern software needs, how AI-assisted tooling enhances ease of use, and why letting the database do the heavy lifting not only leads to more scalable and maintainable applications but also simplifies development in many cases.
 
+[Github Pages Version of DBTypesDemo](https://glcapps.github.io/DBTypesDemo/)
