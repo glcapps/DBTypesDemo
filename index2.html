@@ -3,29 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Databases vs. Application Logic Demo</title>
+    <title>DuckDB-Wasm in Browser</title>
+
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.js"></script>
-    <script type="module">
-        import DuckDB from "duckdb-browser.mjs";
-        const DUCKDB_WASM = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm";
-        
-        let duckDB, duckDBConn;
-        
-        async function initDuckDB() {
-            const bundle = await DuckDB.instantiate(DuckDB.BUNDLES.MVP, DUCKDB_WASM);
-            duckDB = await bundle.createDatabase();
-            duckDBConn = await duckDB.connect();
-        }
-        
-        initDuckDB();
-    </script>
     <script src="https://cdn.jsdelivr.net/npm/pgmock@latest"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Load DuckDB-Wasm as an ES Module -->
+    <script type="module">
+        import * as duckdb from "./duckdb-browser-mjs.js";  // Correct import for browser
+
+        async function initDuckDB() {
+            console.log("Initializing DuckDB...");
+
+            // Define local paths for WebAssembly & Worker files
+            const MANUAL_BUNDLES = {
+                mvp: {
+                    mainModule: "./duckdb-mvp.wasm",
+                    mainWorker: "./duckdb-browser-mvp.worker.js",
+                },
+                eh: {
+                    mainModule: "./duckdb-eh.wasm",
+                    mainWorker: "./duckdb-browser-eh.worker.js",
+                },
+            };
+
+            // Select the appropriate bundle
+            const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+            console.log("Bundle Selected:", bundle);
+
+            // Create a worker with the correct path
+            const worker = new Worker(bundle.mainWorker);
+            const logger = new duckdb.ConsoleLogger();
+
+            // Instantiate DuckDB
+            const db = new duckdb.AsyncDuckDB(logger, worker);
+            await db.instantiate(bundle.mainModule);
+
+            console.log("DuckDB Successfully Initialized.");
+            window.duckDB = db; // Store in global scope for later use
+        }
+
+        // Initialize DuckDB when the script loads
+        initDuckDB();
+    </script>
 </head>
 <body class="bg-gray-900 text-white p-6">
     <div class="max-w-4xl mx-auto">
-        <h1 class="text-2xl font-bold mb-4">Databases vs. Application Logic: Stop Moving Data and Start Leveraging Your DB</h1>
+        <h1 class="text-2xl font-bold mb-4">DuckDB-Wasm in Browser</h1>
         
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
             <h2 class="text-lg font-semibold mb-2">DuckDB Query</h2>
@@ -33,41 +59,25 @@
             <button class="mt-2 bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded" onclick="runDuckDBQuery()">Run Query</button>
             <pre id="duckdb-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
         </div>
-        
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
-            <h2 class="text-lg font-semibold mb-2">PostgreSQL Query (pgMock WASM)</h2>
-            <div id="pg-editor" class="h-40 border rounded bg-gray-700"></div>
-            <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runPGQuery()">Run Query</button>
-            <pre id="pg-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
-        </div>
     </div>
-    
-    <script>
-        let pgDB, duckDBEditor, pgEditor;
 
-        async function initDatabases() {
-            pgDB = new pgmock.Database();
-            await pgDB.query("CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT, age INT);");
-            await pgDB.query("INSERT INTO users (name, age) VALUES ('Alice', 30), ('Bob', 25);");
-        }
+    <script>
+        let duckDBEditor;
 
         async function runDuckDBQuery() {
+            if (!window.duckDB) {
+                document.getElementById("duckdb-output").textContent = "Error: DuckDB not initialized.";
+                return;
+            }
+
             const query = duckDBEditor.getValue();
             try {
-                const result = await duckDBConn.query(query);
+                const conn = await window.duckDB.connect();
+                const result = await conn.query(query);
                 document.getElementById("duckdb-output").textContent = JSON.stringify(result.toArray(), null, 2);
+                conn.close();
             } catch (error) {
                 document.getElementById("duckdb-output").textContent = "Error: " + error.message;
-            }
-        }
-
-        async function runPGQuery() {
-            const query = pgEditor.getValue();
-            try {
-                const result = await pgDB.query(query);
-                document.getElementById("pg-output").textContent = JSON.stringify(result.rows, null, 2);
-            } catch (error) {
-                document.getElementById("pg-output").textContent = "Error: " + error.message;
             }
         }
 
@@ -78,14 +88,7 @@
                 language: "sql",
                 theme: "vs-dark"
             });
-            pgEditor = monaco.editor.create(document.getElementById("pg-editor"), {
-                value: "SELECT * FROM users;",
-                language: "sql",
-                theme: "vs-dark"
-            });
         });
-
-        initDatabases();
     </script>
 </body>
 </html>
