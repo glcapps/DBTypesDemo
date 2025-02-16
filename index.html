@@ -313,10 +313,10 @@ FROM sql_auto_complete('SELECT * FRO');`
                             "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "BOOLEAN", "VARCHAR", 
                             "TEXT", "FLOAT", "DOUBLE", "REAL", "DECIMAL", "NUMERIC", "BLOB", 
                             "DATE", "TIME", "TIMESTAMP", "UUID", "INTERVAL", "ARRAY", "MAP", 
-                            "STRUCT", "JSON",
+                            "STRUCT", //"JSON",
 
                             // DuckDB Common Functions
-                            "COUNT", "SUM", "AVG", "MIN", "MAX", "ROUND", "CEIL", "FLOOR", 
+                            "COUNT", "AVG", "MIN", "MAX", "ROUND", "CEIL", "FLOOR", //"SUM", 
                             "ABS", "SIGN", "TRUNCATE", "EXP", "LN", "LOG", "LOG2", "LOG10", 
                             "POWER", "SQRT", "PI", "SIN", "COS", "TAN", "COT", "DEGREES", 
                             "RADIANS", "MOD", "GREATEST", "LEAST", "RANDOM", "SEQUENCE",
@@ -325,7 +325,7 @@ FROM sql_auto_complete('SELECT * FRO');`
                             "UPPER", "LOWER", "LENGTH", "SUBSTRING", "POSITION", "TRIM", 
                             "LTRIM", "RTRIM", "REPLACE", "CONCAT", "REPEAT", "LEFT", "RIGHT", 
                             "SPLIT_PART", "REGEXP_MATCHES", "REGEXP_REPLACE", "FORMAT", 
-                            "CHAR_LENGTH", "OCTET_LENGTH", "ASCII", "CHR", "LIKE", "ILIKE",
+                            "CHAR_LENGTH", "OCTET_LENGTH", "ASCII", "CHR", "ILIKE",
 
                             // Date & Time Functions
                             "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DATE_PART", 
@@ -358,7 +358,7 @@ FROM sql_auto_complete('SELECT * FRO');`
                             "WRITE_JSON", "LIST_FILES", "LOAD_EXTENSION", "INSTALL_EXTENSION",
 
                             // Miscellaneous
-                            "CASE WHEN", "CAST", "COALESCE", "NULLIF", "GREATEST", "LEAST", 
+                            "CASE WHEN", "CAST", "COALESCE", "NULLIF", "GREATEST",
                             "IFNULL", "IF", "DECODE", "ENCODE", "MD5", "SHA256", "UNNEST", 
                             "TABLESAMPLE", "ANY_VALUE"
                         ];
@@ -371,6 +371,211 @@ FROM sql_auto_complete('SELECT * FRO');`
                                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, // Ensures proper insertion
                                 range: range,
                             }))
+                        };
+                    }
+                });
+                monaco.languages.registerSignatureHelpProvider('sql', {
+                    signatureHelpTriggerCharacters: ['(', ','],
+                    provideSignatureHelp: function (model, position) {
+                        return {
+                            value: {
+                                signatures: [
+                                    {
+                                        label: 'SUM(expression)',
+                                        parameters: [
+                                            { label: 'expression', documentation: 'A numeric column or expression' }
+                                        ]
+                                    },
+                                    {
+                                        label: 'AVG(expression)',
+                                        parameters: [
+                                            { label: 'expression', documentation: 'A numeric column or expression' }
+                                        ]
+                                    },
+                                    {
+                                        label: 'STRING_AGG(expression, delimiter)',
+                                        parameters: [
+                                            { label: 'expression', documentation: 'A string column or expression' },
+                                            { label: 'delimiter', documentation: 'String delimiter used for aggregation' }
+                                        ]
+                                    },
+                                    {
+                                        label: 'DATE_TRUNC(unit, date)',
+                                        parameters: [
+                                            { label: 'unit', documentation: 'Time unit (year, month, day, hour, etc.)' },
+                                            { label: 'date', documentation: 'A timestamp or date' }
+                                        ]
+                                    }
+                                ],
+                                activeSignature: 0,
+                                activeParameter: 0
+                            },
+                            dispose: () => {}
+                        };
+                    }
+                });
+                const sqlKeywordsAndFunctions = {
+                    // 🔹 SQL Keywords from Queries
+                    "SELECT": {
+                        signature: "SELECT columns FROM table",
+                        description: "Retrieves data from a table.",
+                        example: "Example: `SELECT name, age FROM users;`"
+                    },
+                    "FROM": {
+                        signature: "FROM table",
+                        description: "Specifies the source table for the query.",
+                        example: "Example: `SELECT * FROM customers;`"
+                    },
+                    "WHERE": {
+                        signature: "WHERE condition",
+                        description: "Filters results based on a condition.",
+                        example: "Example: `SELECT * FROM users WHERE age > 30;`"
+                    },
+                    "GROUP BY": {
+                        signature: "GROUP BY column",
+                        description: "Groups rows that have the same values into summary rows.",
+                        example: "Example: `SELECT department, COUNT(*) FROM employees GROUP BY department;`"
+                    },
+                    "LIMIT": {
+                        signature: "LIMIT number",
+                        description: "Limits the number of returned rows.",
+                        example: "Example: `SELECT * FROM customers LIMIT 100;`"
+                    },
+
+                    // 🔹 DuckDB-Specific Keywords
+                    "READ_CSV_AUTO": {
+                        signature: "READ_CSV_AUTO(file_path)",
+                        description: "Automatically reads a CSV file into a DuckDB table.",
+                        example: "Example: `SELECT * FROM READ_CSV_AUTO('data.csv');`"
+                    },
+                    "LOAD": {
+                        signature: "LOAD extension",
+                        description: "Loads a DuckDB extension.",
+                        example: "Example: `LOAD autocomplete;`"
+                    },
+                    "sql_auto_complete": {
+                        signature: "sql_auto_complete(query)",
+                        description: "Provides SQL auto-completion for the given query string.",
+                        example: "Example: `SELECT * FROM sql_auto_complete('SELECT * FRO');`"
+                    },
+
+                    // 🔹 SQL Operators & Clauses
+                    "AND": {
+                        signature: "condition AND condition",
+                        description: "Combines multiple conditions in a WHERE clause.",
+                        example: "Example: `SELECT * FROM users WHERE age > 30 AND active = TRUE;`"
+                    },
+                    "OR": {
+                        signature: "condition OR condition",
+                        description: "Returns results if at least one condition is met.",
+                        example: "Example: `SELECT * FROM users WHERE age > 30 OR active = TRUE;`"
+                    },
+                    "AS": {
+                        signature: "column AS alias",
+                        description: "Renames a column or table in the output.",
+                        example: "Example: `SELECT name AS customer_name FROM customers;`"
+                    },
+                    "NOT": {
+                        signature: "NOT condition",
+                        description: "Negates a condition.",
+                        example: "Example: `SELECT * FROM users WHERE NOT active;`"
+                    },
+
+                    // 🔹 SQL Functions from Queries
+                    "COUNT": {
+                        signature: "COUNT(expression)",
+                        description: "Returns the count of rows matching the expression.",
+                        example: "Example: `SELECT COUNT(*) FROM employees;`"
+                    },
+                    "AVG": {
+                        signature: "AVG(expression)",
+                        description: "Returns the average value of a column.",
+                        example: "Example: `SELECT AVG(salary) FROM employees;`"
+                    },
+                    "CAST": {
+                        signature: "CAST(expression AS type) or expression::type",
+                        description: "Converts an expression to a specified type.",
+                        example: "Example: `SELECT 42::STRING;`"
+                    }
+                };
+
+                monaco.languages.registerHoverProvider('sql', {
+                    provideHover: function (model, position) {
+                        const wordAtPosition = model.getWordAtPosition(position);
+                        if (!wordAtPosition) return null; // No word found
+
+                        let word = wordAtPosition.word.toUpperCase(); // Normalize case
+                        let previousWord = model.getWordAtPosition(new monaco.Position(position.lineNumber, wordAtPosition.startColumn - 1));
+                        let nextWord = model.getWordAtPosition(new monaco.Position(position.lineNumber, wordAtPosition.endColumn + 1));
+
+                        // Try forming a multi-word keyword (previous + current)
+                        if (previousWord) {
+                            const multiWordKey = previousWord.word.toUpperCase() + " " + word;
+                            if (sqlKeywordsAndFunctions[multiWordKey]) {
+                                word = multiWordKey;
+                            }
+                        }
+
+                        // Try forming a multi-word keyword (current + next)
+                        if (nextWord) {
+                            const multiWordKey = word + " " + nextWord.word.toUpperCase();
+                            if (sqlKeywordsAndFunctions[multiWordKey]) {
+                                word = multiWordKey;
+                            }
+                        }
+
+                        if (sqlKeywordsAndFunctions[word]) {
+                            return {
+                                range: new monaco.Range(
+                                    position.lineNumber,
+                                    wordAtPosition.startColumn,
+                                    position.lineNumber,
+                                    wordAtPosition.endColumn
+                                ),
+                                contents: [
+                                    { value: `**${sqlKeywordsAndFunctions[word].signature}**` },
+                                    { value: sqlKeywordsAndFunctions[word].description },
+                                    { value: sqlKeywordsAndFunctions[word].example }
+                                ]
+                            };
+                        }
+
+                        return null; // No match, no hover info
+                    }
+                });
+                monaco.languages.registerCompletionItemProvider('sql', {
+                    provideCompletionItems: function () {
+                        return {
+                            suggestions: [
+                                {
+                                    label: 'SUM',
+                                    kind: monaco.languages.CompletionItemKind.Function,
+                                    insertText: 'SUM(${1:expression})',
+                                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                    documentation: 'Returns the sum of a column or expression'
+                                },
+                                {
+                                    label: 'AVG',
+                                    kind: monaco.languages.CompletionItemKind.Function,
+                                    insertText: 'AVG(${1:expression})',
+                                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                    documentation: 'Returns the average of a column or expression'
+                                },
+                                {
+                                    label: 'STRING_AGG',
+                                    kind: monaco.languages.CompletionItemKind.Function,
+                                    insertText: 'STRING_AGG(${1:expression}, ${2:delimiter})',
+                                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                    documentation: 'Aggregates string values with a delimiter'
+                                },
+                                {
+                                    label: 'DATE_TRUNC',
+                                    kind: monaco.languages.CompletionItemKind.Function,
+                                    insertText: 'DATE_TRUNC(${1:unit}, ${2:date})',
+                                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                                    documentation: 'Truncates a timestamp to a specified unit'
+                                }
+                            ]
                         };
                     }
                 });
