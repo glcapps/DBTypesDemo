@@ -261,7 +261,30 @@ FROM sql_auto_complete('SELECT * FRO');`
             <h2 class="text-lg font-semibold mb-2">PostgreSQL Query</h2>
             <div id="pg-editor" class="h-40 border rounded bg-gray-700"></div>
             <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runPGQuery()">Run Query</button>
-            <pre id="pg-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
+             <!-- Tabs Navigation -->
+             <div class="w-full max-w-3xl mx-auto">
+                <div class="flex border-b" data-tabs-toggle="#pg-tabs">
+                    <button id="tab-pgjson" class="px-4 py-2 focus:outline-none" role="tab" data-tabs-target="#pgJsonTab" aria-selected="true">
+                        JSON Output
+                    </button>
+                    <button id="tab-pgtable" class="px-4 py-2 focus:outline-none" role="tab" data-tabs-target="#pgTableTab">
+                        Table Output
+                    </button>
+                </div>
+
+                <!-- Tabs Content Container -->
+                <div id="pg-tabs" class="h-[500px] overflow-hidden">
+                    <!-- JSON Tab Content -->
+                    <div id="pgJsonTab" role="tabpanel" class="p-4 h-full overflow-y-auto" aria-labelledby="tab-pgjson">
+                        <pre id="pg-output" class="overflow-auto p-4 bg-gray-700 border rounded"></pre>
+                    </div>
+
+                    <!-- Table Tab Content -->
+                    <div id="pgTableTab" role="tabpanel" class="p-4 h-full overflow-y-auto hidden" aria-labelledby="tab-pgtable">
+                        <div id="pg-outputTableContainer" class="overflow-auto"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     <script>
@@ -321,8 +344,10 @@ FROM sql_auto_complete('SELECT * FRO');`
                 // const result = window.pgMockInstance.query("SELECT 'Hello, World!' AS message;");
                 const result = await runPGRestSQL(query);
                 document.getElementById("pg-output").textContent = JSON.stringify(result, null, 2);
+                document.getElementById("pg-outputTableContainer").innerHTML = generateTableFromJson(result);
             } catch (error) {
                 document.getElementById("pg-output").textContent = "Error: " + error.message;
+                document.getElementById("pg-outputTableContainer").innerHTML = "";
             }
         }
     </script>
