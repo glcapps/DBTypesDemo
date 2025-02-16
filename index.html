@@ -139,7 +139,7 @@
                 <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(4)">Sample Query 5</button>
             </div>
             <div id="duckdb-editor" class="h-40 border rounded bg-gray-700"></div>
-            <button class="mt-2 bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded" onclick="runDuckDBQuery()">Run Query</button>
+            <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runDuckDBQuery()">Run Query</button>
             <!-- Tabs Navigation -->
             <div class="w-full max-w-3xl mx-auto">
                 <div class="flex border-b" data-tabs-toggle="#duckdb-tabs">
@@ -247,13 +247,14 @@ FROM sql_auto_complete('SELECT * FRO');`
         })();
     </script>
     
-    <div data-collapse="collapse" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
-        <h2 class="text-lg font-semibold mb-2">PostgreSQL Query</h2>
-        <div id="pg-editor" class="h-40 border rounded bg-gray-700"></div>
-        <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runPGQuery()">Run Query</button>
-        <pre id="pg-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
+    <div class="max-w-4xl mx-auto">
+        <div data-collapse="collapse" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
+            <h2 class="text-lg font-semibold mb-2">PostgreSQL Query</h2>
+            <div id="pg-editor" class="h-40 border rounded bg-gray-700"></div>
+            <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runPGQuery()">Run Query</button>
+            <pre id="pg-output" class="bg-gray-700 p-2 mt-2 rounded"></pre>
+        </div>
     </div>
-    
     <script>
         document.getElementById("pg-output").textContent = "pgMock under construction. Please disregard...";
         (function waitForMonacoForPG() {
