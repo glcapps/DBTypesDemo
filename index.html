@@ -22,6 +22,12 @@
             return bytes;
         }
     </script>
+    <script>
+        //shim the json stringify problem for BigInt
+        BigInt.prototype.toJSON = function () {
+            return JSON.rawJSON(this.toString());
+        };
+    </script>
     <!-- Load Monaco separately to avoid exceptions breaking other functionality -->
     <script>
         (function() {
@@ -207,7 +213,7 @@
                 `SELECT * 
 FROM 'https://pub-b1775268df954b4ea5d060e3b4cbf6cc.r2.dev/synthetic_text_to_sql_train.snappy.parquet'
 LIMIT 10;`,
-                `SELECT CAST(COUNT(*) AS STRING) AS "count"
+                `SELECT COUNT(*) AS "count"
 FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet';`,
                 `SELECT l_shipmode AS "shipmode"
 , l_quantity AS "quantity"
