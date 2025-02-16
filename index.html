@@ -296,12 +296,70 @@ FROM sql_auto_complete('SELECT * FRO');`
                         };
                 
                         const sqlKeywords = [
+                            // Standard SQL Keywords
                             "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "JOIN", 
                             "ORDER BY", "GROUP BY", "HAVING", "DISTINCT", "AS", "AND", "OR", 
                             "NOT", "NULL", "IS", "IN", "EXISTS", "BETWEEN", "CASE", "WHEN", 
                             "THEN", "ELSE", "END", "LIMIT", "OFFSET", "CREATE", "ALTER", 
                             "DROP", "TABLE", "INDEX", "VIEW", "TRIGGER", "PRIMARY KEY", 
-                            "FOREIGN KEY", "CHECK", "DEFAULT", "UNIQUE"
+                            "FOREIGN KEY", "CHECK", "DEFAULT", "UNIQUE", "WITH", "RECURSIVE",
+                            "EXPLAIN", "DESCRIBE", "SHOW", "COMMIT", "ROLLBACK", "TRANSACTION",
+                            "SAVEPOINT", "RELEASE", "SET", "LIKE", "ESCAPE", "INTERSECT",
+                            "UNION", "EXCEPT", "VALUES", "CROSS JOIN", "NATURAL JOIN",
+                            "INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "ON", "USING",
+
+                            // Data Types
+                            "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "BOOLEAN", "VARCHAR", 
+                            "TEXT", "FLOAT", "DOUBLE", "REAL", "DECIMAL", "NUMERIC", "BLOB", 
+                            "DATE", "TIME", "TIMESTAMP", "UUID", "INTERVAL", "ARRAY", "MAP", 
+                            "STRUCT", "JSON",
+
+                            // DuckDB Common Functions
+                            "COUNT", "SUM", "AVG", "MIN", "MAX", "ROUND", "CEIL", "FLOOR", 
+                            "ABS", "SIGN", "TRUNCATE", "EXP", "LN", "LOG", "LOG2", "LOG10", 
+                            "POWER", "SQRT", "PI", "SIN", "COS", "TAN", "COT", "DEGREES", 
+                            "RADIANS", "MOD", "GREATEST", "LEAST", "RANDOM", "SEQUENCE",
+
+                            // String Functions
+                            "UPPER", "LOWER", "LENGTH", "SUBSTRING", "POSITION", "TRIM", 
+                            "LTRIM", "RTRIM", "REPLACE", "CONCAT", "REPEAT", "LEFT", "RIGHT", 
+                            "SPLIT_PART", "REGEXP_MATCHES", "REGEXP_REPLACE", "FORMAT", 
+                            "CHAR_LENGTH", "OCTET_LENGTH", "ASCII", "CHR", "LIKE", "ILIKE",
+
+                            // Date & Time Functions
+                            "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DATE_PART", 
+                            "DATE_TRUNC", "EXTRACT", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", 
+                            "SECOND", "EPOCH", "AGE", "NOW", "TIMEZONE", "MAKE_DATE", 
+                            "MAKE_TIME", "MAKE_TIMESTAMP", "TO_TIMESTAMP", "TO_DATE", 
+                            "TO_TIME", "INTERVAL",
+
+                            // Aggregate Functions
+                            "GROUP_CONCAT", "ARRAY_AGG", "STRING_AGG", "MEDIAN", "MODE", 
+                            "PERCENTILE_CONT", "PERCENTILE_DISC", "STDDEV", "VARIANCE", 
+                            "COVAR_POP", "COVAR_SAMP", "CORR", "REGR_SLOPE", "REGR_INTERCEPT",
+
+                            // Window Functions
+                            "RANK", "DENSE_RANK", "ROW_NUMBER", "NTILE", "LAG", "LEAD", 
+                            "FIRST_VALUE", "LAST_VALUE", "NTH_VALUE", "CUME_DIST", "PERCENT_RANK",
+
+                            // JSON Functions
+                            "JSON", "JSON_EXTRACT", "JSON_EXTRACT_SCALAR", "JSON_TYPE", 
+                            "JSON_VALID", "JSON_OBJECT", "JSON_ARRAY", "JSON_GROUP_ARRAY",
+                            "JSON_GROUP_OBJECT", "JSONB",
+
+                            // Array & Map Functions
+                            "ARRAY_LENGTH", "ARRAY_APPEND", "ARRAY_PREPEND", "ARRAY_CONCAT",
+                            "ARRAY_POSITION", "ARRAY_REPLACE", "ARRAY_SLICE", "MAP_KEYS", 
+                            "MAP_VALUES", "MAP_ENTRIES",
+
+                            // File & Parquet Functions (DuckDB-specific)
+                            "READ_CSV", "READ_PARQUET", "READ_JSON", "WRITE_CSV", "WRITE_PARQUET",
+                            "WRITE_JSON", "LIST_FILES", "LOAD_EXTENSION", "INSTALL_EXTENSION",
+
+                            // Miscellaneous
+                            "CASE WHEN", "CAST", "COALESCE", "NULLIF", "GREATEST", "LEAST", 
+                            "IFNULL", "IF", "DECODE", "ENCODE", "MD5", "SHA256", "UNNEST", 
+                            "TABLESAMPLE", "ANY_VALUE"
                         ];
                 
                         return {
@@ -315,7 +373,114 @@ FROM sql_auto_complete('SELECT * FRO');`
                         };
                     }
                 });
-                console.log("SQL IntelliSense Enabled");
+                console.log("DuckDB SQL IntelliSense Enabled");
+                // monaco.languages.registerCompletionItemProvider("plsql", {
+                //     provideCompletionItems: function (model, position) {
+                //         var word = model.getWordUntilPosition(position);
+                //         var range = {
+                //             startLineNumber: position.lineNumber,
+                //             endLineNumber: position.lineNumber,
+                //             startColumn: word.startColumn,
+                //             endColumn: word.endColumn,
+                //         };
+                
+                //         const sqlKeywords = [
+                //             // Standard SQL Keywords
+                //             "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "JOIN", 
+                //             "ORDER BY", "GROUP BY", "HAVING", "DISTINCT", "AS", "AND", "OR", 
+                //             "NOT", "NULL", "IS", "IN", "EXISTS", "BETWEEN", "CASE", "WHEN", 
+                //             "THEN", "ELSE", "END", "LIMIT", "OFFSET", "CREATE", "ALTER", 
+                //             "DROP", "TABLE", "INDEX", "VIEW", "TRIGGER", "PRIMARY KEY", 
+                //             "FOREIGN KEY", "CHECK", "DEFAULT", "UNIQUE", "WITH", "RECURSIVE",
+                //             "EXPLAIN", "DESCRIBE", "SHOW", "COMMIT", "ROLLBACK", "TRANSACTION",
+                //             "SAVEPOINT", "RELEASE", "SET", "LIKE", "ESCAPE", "INTERSECT",
+                //             "UNION", "EXCEPT", "VALUES", "CROSS JOIN", "NATURAL JOIN",
+                //             "INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "ON", "USING",
+                //             "WINDOW", "PARTITION BY", "TABLESAMPLE", "LATERAL", "RETURNING",
+                //             "DO", "LANGUAGE", "PLPGSQL", "DECLARE",
+
+                //             // Data Types
+                //             "INTEGER", "BIGINT", "SMALLINT", "SERIAL", "BIGSERIAL", "BOOLEAN", 
+                //             "VARCHAR", "TEXT", "FLOAT", "DOUBLE PRECISION", "REAL", "DECIMAL", 
+                //             "NUMERIC", "BYTEA", "DATE", "TIME", "TIMESTAMP", "TIMESTAMPTZ", 
+                //             "UUID", "INTERVAL", "ARRAY", "JSON", "JSONB", "HSTORE", "TSVECTOR", 
+                //             "TSQUERY", "INET", "CIDR", "MACADDR", "MONEY", "POINT", "LINE", 
+                //             "LSEG", "BOX", "PATH", "POLYGON", "CIRCLE",
+
+                //             // PostgreSQL Common Functions
+                //             "COUNT", "SUM", "AVG", "MIN", "MAX", "ROUND", "CEIL", "FLOOR", 
+                //             "ABS", "SIGN", "TRUNC", "EXP", "LN", "LOG", "LOG2", "LOG10", 
+                //             "POWER", "SQRT", "PI", "SIN", "COS", "TAN", "COT", "DEGREES", 
+                //             "RADIANS", "MOD", "GREATEST", "LEAST", "RANDOM", "SEQUENCE",
+                //             "GENERATE_SERIES",
+
+                //             // String Functions
+                //             "UPPER", "LOWER", "LENGTH", "SUBSTRING", "POSITION", "TRIM", 
+                //             "LTRIM", "RTRIM", "REPLACE", "CONCAT", "REPEAT", "LEFT", "RIGHT", 
+                //             "SPLIT_PART", "REGEXP_MATCHES", "REGEXP_REPLACE", "FORMAT", 
+                //             "CHAR_LENGTH", "OCTET_LENGTH", "ASCII", "CHR", "LIKE", "ILIKE",
+                //             "TO_CHAR", "TO_NUMBER", "TO_DATE", "TO_TIMESTAMP",
+
+                //             // Date & Time Functions
+                //             "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DATE_PART", 
+                //             "DATE_TRUNC", "EXTRACT", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", 
+                //             "SECOND", "EPOCH", "AGE", "NOW", "TIMEZONE", "MAKE_DATE", 
+                //             "MAKE_TIME", "MAKE_TIMESTAMP", "INTERVAL",
+
+                //             // Aggregate Functions
+                //             "GROUP_CONCAT", "ARRAY_AGG", "STRING_AGG", "MEDIAN", "MODE", 
+                //             "PERCENTILE_CONT", "PERCENTILE_DISC", "STDDEV", "VARIANCE", 
+                //             "COVAR_POP", "COVAR_SAMP", "CORR", "REGR_SLOPE", "REGR_INTERCEPT",
+
+                //             // Window Functions
+                //             "RANK", "DENSE_RANK", "ROW_NUMBER", "NTILE", "LAG", "LEAD", 
+                //             "FIRST_VALUE", "LAST_VALUE", "NTH_VALUE", "CUME_DIST", "PERCENT_RANK",
+
+                //             // JSON & JSONB Functions
+                //             "JSONB_OBJECT", "JSONB_ARRAY", "JSONB_EXTRACT_PATH", 
+                //             "JSONB_EXTRACT_PATH_TEXT", "JSONB_AGG", "JSONB_BUILD_OBJECT",
+                //             "JSONB_BUILD_ARRAY", "JSONB_SET", "JSONB_INSERT", "JSONB_DELETE",
+                //             "JSONB_PATH_QUERY", "JSONB_EACH", "JSONB_EACH_TEXT",
+
+                //             // Array & HSTORE Functions
+                //             "ARRAY_LENGTH", "ARRAY_APPEND", "ARRAY_PREPEND", "ARRAY_CONCAT",
+                //             "ARRAY_POSITION", "ARRAY_REPLACE", "ARRAY_SLICE", "HSTORE",
+                //             "HSTORE_TO_JSON", "HSTORE_TO_JSONB", "EACH", "HSTORE_EXISTS",
+
+                //             // Full-Text Search Functions
+                //             "TO_TSVECTOR", "TO_TSQUERY", "WEBSEARCH_TO_TSQUERY", "PHRASETO_TSQUERY",
+                //             "PLAINTO_TSQUERY", "TS_RANK", "TS_RANK_CD",
+
+                //             // Geospatial Functions
+                //             "ST_AsText", "ST_GeomFromText", "ST_Distance", "ST_Intersects", 
+                //             "ST_Within", "ST_Contains", "ST_Area", "ST_Length",
+
+                //             // Indexing & Performance
+                //             "CREATE INDEX", "DROP INDEX", "CLUSTER", "ANALYZE", "VACUUM",
+                //             "EXPLAIN ANALYZE", "PG_STAT_STATEMENTS_RESET",
+
+                //             // Security & Roles
+                //             "GRANT", "REVOKE", "CREATE USER", "ALTER USER", "DROP USER",
+                //             "CREATE ROLE", "ALTER ROLE", "DROP ROLE",
+
+                //             // Miscellaneous
+                //             "CASE WHEN", "CAST", "COALESCE", "NULLIF", "GREATEST", "LEAST", 
+                //             "IFNULL", "DECODE", "ENCODE", "MD5", "SHA256", "UNNEST", 
+                //             "ANY_VALUE", "CITEXT", "LATERAL", "RETURNING"
+                //         ];
+                
+                //         return {
+                //             suggestions: sqlKeywords.map(keyword => ({
+                //                 label: keyword,
+                //                 kind: monaco.languages.CompletionItemKind.Keyword,
+                //                 insertText: keyword + " ", // Adds trailing space
+                //                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, // Ensures proper insertion
+                //                 range: range,
+                //             }))
+                //         };
+                //     }
+                // });
+                // console.log("Postgred SQL IntelliSense Enabled");
             } else {
                 setTimeout(enableSQLIntelliSense, 100);
             }
