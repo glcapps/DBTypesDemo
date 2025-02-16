@@ -58,3 +58,77 @@ docker run --rm --name postgrest-demo -p 8088:3000 `
 
 Test PowerShell command: --expect json:
 Invoke-RestMethod -Uri "http://127.0.0.1:8088/" -Method Get -Headers @{"Accept"="application/json"}
+
+
+echo "🚀 Starting PostgreSQL with Apache AGE..."
+docker run --rm --name demo-db -e POSTGRES_PASSWORD=secret -d apache/age
+
+echo "⏳ Waiting for PostgreSQL to start..."
+until docker exec demo-db pg_isready -U postgres > /dev/null 2>&1; do
+  sleep 2
+done
+
+echo "🛠️ Installing PostgreSQL development tools and build dependencies..."
+docker exec demo-db bash -c "apt-get update && apt-get install -y \
+    postgresql-contrib postgresql-server-dev-15 \
+    build-essential git cmake libxml2-dev libjson-c-dev flex bison gcc clang"
+
+echo "🔧 Cloning and Building pgvector from Source..."
+docker exec demo-db bash -c "
+  git clone --depth 1 https://github.com/pgvector/pgvector.git &&
+  cd pgvector &&
+  make && make install
+"
+
+echo "🔌 Enabling PostgreSQL extensions..."
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS age;"
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS xml2;"
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS cube;"
+
+echo "🛠️ Creating PostgREST-compatible SQL function..."
+docker exec demo-db psql -U postgres -c "
+CREATE OR REPLACE FUNCTION sql(query TEXT) RETURNS JSONB AS \$\$
+DECLARE
+    stmt TEXT;
+    result JSONB := '[]'::JSONB;
+    query_array TEXT[];
+    temp_result JSONB;
+    i INT;
+BEGIN
+    -- Split queries on semicolon (;)
+    query_array := string_to_array(query, ';');
+
+    -- Loop through each statement and execute it
+    FOR i IN 1..array_length(query_array, 1) LOOP
+        stmt := trim(query_array[i]);
+
+        -- Skip empty statements
+        IF stmt <> '' THEN
+            -- If it's a SELECT, return results as JSON
+            IF lower(stmt) LIKE 'select%' THEN
+                EXECUTE format('SELECT jsonb_agg(t) FROM (%s) t', stmt) INTO temp_result;
+                -- Append results to the final JSON array
+                result := result || COALESCE(temp_result, '[]'::JSONB);
+            ELSE
+                -- If it's DDL/DML (CREATE, INSERT, DROP, etc.), execute but don’t return results
+                EXECUTE stmt;
+            END IF;
+        END IF;
+    END LOOP;
+
+    RETURN result;
+END;
+\$\$ LANGUAGE plpgsql SECURITY DEFINER;
+GRANT EXECUTE ON FUNCTION sql(TEXT) TO anon;
+"
+
+echo "🚀 Starting PostgREST..."
+docker run --rm --name postgrest-demo -p 8088:3000 \
+  -e PGRST_DB_URI="postgres://postgres:secret@demo-db/postgres" \
+  -e PGRST_DB_ANON_ROLE=anon \
+  -e PGRST_DB_SCHEMAS=public \
+  -e PGRST_CORS_ALLOWED_ORIGINS="*" \
+  --link demo-db postgrest/postgrest
+
+
