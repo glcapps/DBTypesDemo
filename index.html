@@ -266,10 +266,7 @@ FROM sql_auto_complete('SELECT * FRO');`
     </div>
     <script>
         async function runPGRestSQL(query) {
-            const url = "http://127.0.0.1:8088/rpc/sql"; 
-
-            // Ensure no trailing semicolon (PostgREST does not accept it)
-            query = query.trim().replace(/;$/, "");
+            const url = "http://127.0.0.1:8088/rpc/sql";
 
             const body = { query };
 
@@ -288,10 +285,10 @@ FROM sql_auto_complete('SELECT * FRO');`
                 }
 
                 const data = await response.json();
-                // console.log("✅ Query Result:", data);
+                console.log("✅ Query Result:", data);
                 return data;
             } catch (error) {
-                // console.error("❌ SQL Query Error:", error);
+                console.error("❌ SQL Query Error:", error);
                 return null;
             }
         }
