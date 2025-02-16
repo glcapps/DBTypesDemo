@@ -60,6 +60,8 @@ Test PowerShell command: --expect json:
 Invoke-RestMethod -Uri "http://127.0.0.1:8088/" -Method Get -Headers @{"Accept"="application/json"}
 
 
+
+
 echo "🚀 Starting PostgreSQL with Apache AGE..."
 docker run --rm --name demo-db -e POSTGRES_PASSWORD=secret -d apache/age
 
@@ -70,15 +72,11 @@ done
 
 echo "🛠️ Installing PostgreSQL development tools and build dependencies..."
 docker exec demo-db bash -c "apt-get update && apt-get install -y \
-    postgresql-contrib postgresql-server-dev-15 \
+    postgresql-contrib postgresql-server-dev-16 \
     build-essential git cmake libxml2-dev libjson-c-dev flex bison gcc clang"
 
-echo "🔧 Cloning and Building pgvector from Source..."
-docker exec demo-db bash -c "
-  git clone --depth 1 https://github.com/pgvector/pgvector.git &&
-  cd pgvector &&
-  make && make install
-"
+echo "🛠️ Installing PgVector for PostgreSQL 16 using APT..."
+docker exec demo-db bash -c "apt-get update && apt-get install -y postgresql-16-pgvector"
 
 echo "🔌 Enabling PostgreSQL extensions..."
 docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS age;"
@@ -86,9 +84,14 @@ docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
 docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS xml2;"
 docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS cube;"
 
+echo "⚙️ Configuring PostgreSQL roles and functions..."
+docker exec demo-db psql -U postgres -c "CREATE ROLE anon NOLOGIN;"
+docker exec demo-db psql -U postgres -c "GRANT USAGE ON SCHEMA public TO anon;"
+docker exec demo-db psql -U postgres -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;"
+
 echo "🛠️ Creating PostgREST-compatible SQL function..."
 docker exec demo-db psql -U postgres -c "
-CREATE OR REPLACE FUNCTION sql(query TEXT) RETURNS JSONB AS \$\$
+CREATE OR REPLACE FUNCTION public.sql(query TEXT) RETURNS JSONB AS \$\$
 DECLARE
     stmt TEXT;
     result JSONB := '[]'::JSONB;
@@ -120,15 +123,19 @@ BEGIN
     RETURN result;
 END;
 \$\$ LANGUAGE plpgsql SECURITY DEFINER;
-GRANT EXECUTE ON FUNCTION sql(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.sql(TEXT) TO anon;
 "
 
-echo "🚀 Starting PostgREST..."
+echo "✅ Installed PostgreSQL Extensions:"
+docker exec demo-db psql -U postgres -c "\dx"
+
+echo "🚀 Restarting PostgREST to refresh the schema cache..."
+docker stop postgrest-demo >/dev/null 2>&1 || true
 docker run --rm --name postgrest-demo -p 8088:3000 \
   -e PGRST_DB_URI="postgres://postgres:secret@demo-db/postgres" \
   -e PGRST_DB_ANON_ROLE=anon \
+  -e PGRST_DB_SCHEMAS=public,ag_catalog \
   -e PGRST_DB_SCHEMAS=public \
+  -e PGRST_DB_SCHEMA_CACHE_TTL=0 \
   -e PGRST_CORS_ALLOWED_ORIGINS="*" \
   --link demo-db postgrest/postgrest
-
-
