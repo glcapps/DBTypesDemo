@@ -265,11 +265,46 @@ FROM sql_auto_complete('SELECT * FRO');`
         </div>
     </div>
     <script>
-        document.getElementById("pg-output").textContent = "pgMock under construction. Please disregard...";
+        async function runPGRestSQL(query) {
+            const url = "http://127.0.0.1:8088/rpc/sql"; 
+
+            // Ensure no trailing semicolon (PostgREST does not accept it)
+            query = query.trim().replace(/;$/, "");
+
+            const body = { query };
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP Error ${response.status}: ${await response.text()}`);
+                }
+
+                const data = await response.json();
+                // console.log("✅ Query Result:", data);
+                return data;
+            } catch (error) {
+                // console.error("❌ SQL Query Error:", error);
+                return null;
+            }
+        }
+        runPGRestSQL(`SELECT 'PostgRest is running' AS "Test"`)
+            .then(result => console.log(result))
+            .catch(error => console.error("❌ PostgRest Query Error:", error));
+    </script>
+    <script>
+        // document.getElementById("pg-output").textContent = "pgMock under construction. Please disregard...";
         (function waitForMonacoForPG() {
             if (window.monacoLoaded) {
                 window.pgEditor = monaco.editor.create(document.getElementById("pg-editor"), {
-                    value: "SELECT 'Hello, World!' AS message;",
+                    value: `SELECT 'Hello, World' AS "greeting"`,
                     language: "sql",
                     theme: "vs-dark"
                 });
@@ -278,15 +313,17 @@ FROM sql_auto_complete('SELECT * FRO');`
             }
         })();
 
-        function runPGQuery() {
-            if (!window.pgMockInstance) {
-                document.getElementById("pg-output").textContent = "Error: pgMock not initialized. Please wait...";
-                return;
-            }
+        async function runPGQuery() {
+            // if (!window.pgMockInstance) {
+            //     document.getElementById("pg-output").textContent = "Error: pgMock not initialized. Please wait...";
+            //     return;
+            // }
 
             try {
-                const result = window.pgMockInstance.query("SELECT 'Hello, World!' AS message;");
-                document.getElementById("pg-output").textContent = JSON.stringify(result.rows, null, 2);
+                const query = window.pgEditor.getValue();
+                // const result = window.pgMockInstance.query("SELECT 'Hello, World!' AS message;");
+                const result = await runPGRestSQL(query);
+                document.getElementById("pg-output").textContent = JSON.stringify(result, null, 2);
             } catch (error) {
                 document.getElementById("pg-output").textContent = "Error: " + error.message;
             }
