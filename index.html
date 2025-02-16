@@ -259,6 +259,14 @@ FROM sql_auto_complete('SELECT * FRO');`
     <div class="max-w-4xl mx-auto">
         <div data-collapse="collapse" class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
             <h2 class="text-lg font-semibold mb-2">PostgreSQL Query</h2>
+            <div class="flex gap-2 mb-2">
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillPGQuery(0)">Sample Query DocumentDB</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillPGQuery(1)">Sample Query GraphDB</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillPGQuery(2)">Sample Query Cube Data</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillPGQuery(3)">Sample Query VectorDB</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillPGQuery(4)">Sample Query XML XPath</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillPGQuery(5)">Sample Query Miscellaneous</button>
+            </div>
             <div id="pg-editor" class="h-40 border rounded bg-gray-700"></div>
             <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runPGQuery()">Run Query</button>
              <!-- Tabs Navigation -->
@@ -288,28 +296,142 @@ FROM sql_auto_complete('SELECT * FRO');`
         </div>
     </div>
     <script>
+        function prefillPGQuery(queryIndex) {
+            const queries = [
+                `DROP TABLE IF EXISTS users CASCADE;
+CREATE TABLE users (id SERIAL PRIMARY KEY, data JSONB);
+INSERT INTO users (data) VALUES ('{"name": "Alice", "age": 30, "city": "New York"}');
+INSERT INTO users (data) VALUES ('{"name": "Eddie", "age": 40, "city": "New York"}');
+-- ✅ Name the column explicitly
+SELECT data->>'name' AS name FROM users WHERE data->>'city' = 'New York';
+UPDATE users SET data = jsonb_set(data, '{age}', '31') WHERE data->>'name' = 'Alice';
+SELECT * FROM users WHERE data @> '{"name": "Alice"}';
+DELETE FROM users WHERE data->>'name' = 'Alice';
+-- ✅ Ensure column name is assigned
+SELECT data->>'name' AS name FROM users WHERE data->>'city' = 'New York';`,
+`SELECT ag_catalog.drop_graph('demo_graph', TRUE);
+SELECT ag_catalog.create_graph('demo_graph');
+-- ✅ Escape single quotes properly
+SELECT * FROM ag_catalog.cypher('demo_graph', 
+    'CREATE (:Person {name: ''Alice''})')
+    AS (status text);
+SELECT * FROM ag_catalog.cypher('demo_graph', 
+    'MATCH (a:Person) RETURN a.name')
+    AS (name text);`,
+`DROP TABLE IF EXISTS sales CASCADE;
+CREATE TABLE sales (region TEXT, product TEXT, revenue NUMERIC);
+INSERT INTO sales VALUES ('North', 'Laptop', 1200), ('South', 'Tablet', 800);
+SELECT region, product, SUM(revenue) FROM sales GROUP BY CUBE (region, product);`,
+`DROP TABLE IF EXISTS embeddings CASCADE;
+CREATE TABLE embeddings (id SERIAL PRIMARY KEY, vec VECTOR(3));
+INSERT INTO embeddings (vec) VALUES ('[0.1, 0.2, 0.3]'), ('[0.3, 0.2, 0.1]');
+SELECT id, vec <-> '[0.2, 0.2, 0.2]' AS distance FROM embeddings ORDER BY distance LIMIT 1;`,
+`DROP TABLE IF EXISTS books CASCADE;
+CREATE TABLE books (id SERIAL PRIMARY KEY, data XML);
+INSERT INTO books (data) VALUES ('<book><title>SQL Guide</title><author>Alice</author></book>');
+SELECT xpath('//title/text()', data) FROM books;`
+            ];
+            if (window.pgEditor && queries[queryIndex]) {
+                window.pgEditor.setValue(queries[queryIndex]);
+            }
+        }
+    </script>
+    <script>
         async function runPGRestSQL(query) {
             const url = "http://127.0.0.1:8088/rpc/sql";
 
-            const body = { query };
+            // Function to properly split SQL statements while respecting quotes
+            function splitSQLStatements(sql) {
+                let statements = [];
+                let current = "";
+                let inSingleQuote = false;
+                let inDoubleQuote = false;
+                let inDollarQuote = false;
+                let dollarTag = "";
 
-            try {
-                const response = await fetch(url, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-                    body: JSON.stringify(body)
-                });
+                for (let i = 0; i < sql.length; i++) {
+                    let char = sql[i];
 
-                if (!response.ok) {
-                    throw new Error(`HTTP Error ${response.status}: ${await response.text()}`);
+                    // Toggle single-quote mode (avoid splitting inside 'string')
+                    if (char === "'" && !inDoubleQuote && !inDollarQuote) {
+                        inSingleQuote = !inSingleQuote;
+                    }
+                    // Toggle double-quote mode (avoid splitting inside "identifier")
+                    else if (char === '"' && !inSingleQuote && !inDollarQuote) {
+                        inDoubleQuote = !inDoubleQuote;
+                    }
+                    // Detect dollar-quoted strings (e.g., $$ or $tag$...$tag$)
+                    else if (char === "$" && !inSingleQuote && !inDoubleQuote) {
+                        let match = sql.slice(i).match(/^\$[a-zA-Z0-9_]*\$/);
+                        if (match) {
+                            if (inDollarQuote && dollarTag === match[0]) {
+                                inDollarQuote = false;  // Closing the dollar quote
+                                dollarTag = "";
+                            } else if (!inDollarQuote) {
+                                inDollarQuote = true;  // Opening the dollar quote
+                                dollarTag = match[0];
+                            }
+                            i += match[0].length - 1;  // Skip over the dollar tag
+                        }
+                    }
+                    // Handle semicolon splitting
+                    else if (char === ";" && !inSingleQuote && !inDoubleQuote && !inDollarQuote) {
+                        if (current.trim() !== "") {
+                            statements.push(current.trim());
+                            current = "";
+                        }
+                        continue;
+                    }
+
+                    current += char;
                 }
 
-                const data = await response.json();
-                console.log("✅ Query Result:", data);
-                return data;
+                if (current.trim() !== "") {
+                    statements.push(current.trim());
+                }
+
+                return statements;
+            }
+            function removeComments(query) {
+                return query
+                    .split("\n") // Split by lines
+                    .map(line => {
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith("--")) return ""; // Remove full comment lines
+                        return trimmed.split("--")[0].trim(); // Remove end-of-line comments
+                    })
+                    .filter(line => line.length > 0) // Remove empty lines
+                    .join("\n"); // Reassemble query
+            }
+            query = removeComments(query);
+            // Split the query safely
+            const queries = splitSQLStatements(query);
+            let results = [];
+
+            try {
+                for (const q of queries) {
+                    const body = { query: q };
+
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error ${response.status}: ${await response.text()}`);
+                    }
+
+                    const data = await response.json();
+                    // results.push({ query: q, result: data });
+                    results.push(data);
+                }
+
+                console.log("✅ Query Results:", results);
+                return results.at(-1); //just the output of the final query
             } catch (error) {
                 console.error("❌ SQL Query Error:", error);
                 return null;
