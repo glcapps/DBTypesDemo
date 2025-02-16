@@ -132,11 +132,12 @@
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
             <h2 class="text-lg font-semibold mb-2">DuckDB Query</h2>
             <div class="flex gap-2 mb-2">
-                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(0)">Sample Query 1</button>
-                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(1)">Sample Query 2</button>
-                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(2)">Sample Query 3</button>
-                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(3)">Sample Query 4</button>
-                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(4)">Sample Query 5</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(0)">Sample Query Parquet</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(1)">Sample Query Functions</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(2)">Sample Query Renaming</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(3)">Sample Query Join Group</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(4)">Sample Query CSV</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(5)">Sample Query Join Inner</button>
             </div>
             <div id="duckdb-editor" class="h-40 border rounded bg-gray-700"></div>
             <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runDuckDBQuery()">Run Query</button>
@@ -184,6 +185,7 @@
                 conn.close();
             } catch (error) {
                 document.getElementById("duckdb-output").textContent = "Error: " + error.message;
+                document.getElementById("duckdb-outputTableContainer").innerHTML = "";
             }
         }
 
@@ -203,11 +205,13 @@
         function prefillDuckDBQuery(queryIndex) {
             const queries = [
                 `SELECT * 
-FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet'
-LIMIT 100;`,
-                `SELECT STRING(COUNT(*)) AS "count"
+FROM 'https://pub-b1775268df954b4ea5d060e3b4cbf6cc.r2.dev/synthetic_text_to_sql_train.snappy.parquet'
+LIMIT 10;`,
+                `SELECT CAST(COUNT(*) AS STRING) AS "count"
 FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet';`,
-                `SELECT l_shipmode, l_quantity, l_shipdate
+                `SELECT l_shipmode AS "shipmode"
+, l_quantity AS "quantity"
+, l_shipdate AS "shipdate"
 FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet' 
 LIMIT 100;`,
                 `SELECT n_name AS 'NationName',
@@ -215,11 +219,16 @@ AVG(c_acctbal) AS 'AverageBalance'
 FROM
     'https://shell.duckdb.org/data/tpch/0_01/parquet/customer.parquet',
     'https://shell.duckdb.org/data/tpch/0_01/parquet/nation.parquet'
-WHERE 1=1
-AND c_nationkey = n_nationkey
+WHERE c_nationkey = n_nationkey
 GROUP BY n_name;`,
 `SELECT *
 FROM READ_CSV_AUTO('https://docs.google.com/spreadsheets/d/1fy3GbhVC8iuA9JZTqhzG3Ij_8nIn_PoZnZK2ofpZ0rs/gviz/tq?tqx=out:csv');`,
+`SELECT p.movie_id AS "movieId", p.title, p.plain_full_script AS "fullScript"
+FROM READ_PARQUET('https://pub-b1775268df954b4ea5d060e3b4cbf6cc.r2.dev/plain_full_script.parquet') AS p
+INNER JOIN READ_CSV_AUTO('https://docs.google.com/spreadsheets/d/1fy3GbhVC8iuA9JZTqhzG3Ij_8nIn_PoZnZK2ofpZ0rs/gviz/tq?tqx=out:csv') AS c
+USING (movie_id, title)
+LIMIT 3;`,
+`SELECT DATE_TRUNC('month', current_date);`,
 `LOAD autocomplete;
 SELECT *
 FROM sql_auto_complete('SELECT * FRO');`
@@ -441,6 +450,16 @@ FROM sql_auto_complete('SELECT * FRO');`
                         description: "Limits the number of returned rows.",
                         example: "Example: `SELECT * FROM customers LIMIT 100;`"
                     },
+                    "INNER JOIN": {
+                        signature: "INNER JOIN table ON condition",
+                        description: "Returns only matching rows from both tables.",
+                        example: "Example:\n```sql\nSELECT p.movie_id, p.title, p.plain_full_script \nFROM read_parquet('movies.parquet') AS p \nINNER JOIN READ_CSV_AUTO('movies.csv') AS c \nON p.movie_id = c.movie_id;\n```"
+                    },
+                    "USING": {
+                        signature: "JOIN table USING (column1, column2, ...)",
+                        description: "Joins tables on common column(s) without repeating them.",
+                        example: "Example:\n```sql\nSELECT p.movie_id, p.title, p.plain_full_script \nFROM read_parquet('movies.parquet') AS p \nJOIN READ_CSV_AUTO('movies.csv') AS c \nUSING (movie_id, title);\n```"
+                    },
 
                     // 🔹 DuckDB-Specific Keywords
                     "READ_CSV_AUTO": {
@@ -496,6 +515,11 @@ FROM sql_auto_complete('SELECT * FRO');`
                         signature: "CAST(expression AS type) or expression::type",
                         description: "Converts an expression to a specified type.",
                         example: "Example: `SELECT 42::STRING;`"
+                    },
+                    "STRING": {
+                        signature: "CAST(expression AS STRING) or expression::STRING",
+                        description: "Converts an expression into a string representation.",
+                        example: "Example: `SELECT 12345::STRING AS text_value;` or `SELECT CAST(employeenumber AS STRING) FROM employees;`"
                     }
                 };
 
