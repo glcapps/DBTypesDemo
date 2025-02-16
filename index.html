@@ -205,7 +205,7 @@
                 `SELECT * 
 FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet'
 LIMIT 100;`,
-                `SELECT COUNT(*)::STRING AS "count"
+                `SELECT STRING(COUNT(*)) AS "count"
 FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet';`,
                 `SELECT l_shipmode, l_quantity, l_shipdate
 FROM 'https://shell.duckdb.org/data/tpch/0_01/parquet/lineitem.parquet' 
