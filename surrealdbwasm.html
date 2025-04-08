@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>SurrealDB Vector Demo</title>
+</head>
+<body>
+
+<h1>SurrealDB Vector Demo</h1>
+<div id="result"></div>
+
+<script type="module">
+  // 1) Import Surreal (the JS client) and the WASM plugin from a CDN
+  import { Surreal } from "https://esm.sh/surrealdb@latest";
+  import { surrealdbWasmEngines } from "https://esm.sh/@surrealdb/wasm@latest";
+
+  // 2) Wrap our async demo logic
+  (async () => {
+    try {
+      // a) Create the SurrealDB client, enabling WASM
+      const db = new Surreal({
+        engines: surrealdbWasmEngines(),
+      });
+
+      // b) Connect to an in-memory DB
+      await db.connect("mem://");
+
+      // c) Choose a namespace / database
+      await db.use({
+        namespace: "demo_ns",
+        database: "demo_db",
+      });
+
+      // d) Create some sample data with vectors
+      //    For example, you can imagine these are 3D embeddings
+      //    representing fruit "flavors" or some abstract semantic embedding
+      await db.create("fruit", {
+        name: "Apple",
+        embedding: [0.9, 0.1, 0.0],
+      });
+      await db.create("fruit", {
+        name: "Orange",
+        embedding: [0.7, 0.3, 0.2],
+      });
+      await db.create("fruit", {
+        name: "Banana",
+        embedding: [0.2, 0.8, 0.1],
+      });
+
+
+// Quick test - confirm we have data
+const allFruits = await db.select("fruit");
+console.log("allFruits", allFruits);
+
+      // e) Now let's define a "query vector" that we want to compare
+      //    to see which fruit is closest in embedding space
+      const queryVector = [0.8, 0.15, 0.05];
+
+      // f) Run a vector distance query
+      //    SurrealDB typically uses:
+      //      embedding <-> $var   (Euclidean distance)
+      //      embedding <#> $var   (Cosine similarity/distance)
+      //    We'll show the Euclidean example here:
+
+      const [response] = await db.query(
+        `
+        SELECT *,
+            embedding <-> ? AS distance
+        FROM fruit
+        ORDER BY distance ASC
+        LIMIT 1
+        `,
+        {
+          vector: queryVector,
+        },
+      );
+
+      // The query returns an array of results; let's get the first row
+      const closest = response[0].name ?? [];
+
+      // g) Display the outcome
+      document.getElementById("result").innerText =
+        `Query Vector: [${queryVector.join(", ")}]\n\n` +
+        `Closest match: ${closest}`;
+
+    } catch (error) {
+      console.error("Error:", error);
+      document.getElementById("result").innerText =
+        "Error:\n\n" + error.message;
+    }
+  })();
+</script>
+
+</body>
+</html>
