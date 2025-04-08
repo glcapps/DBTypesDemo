@@ -1,94 +1,113 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <title>SurrealDB Vector Demo</title>
+  <meta charset="utf-8">
+  <title>SurrealDB Color Squares Demo</title>
 </head>
 <body>
 
-<h1>SurrealDB Vector Demo</h1>
-<div id="result"></div>
+<h1>SurrealDB Color Squares Demo</h1>
+<p>
+  Below, we rank each color by its "squared distance" to a query color, and show a small
+  swatch of the actual color so you can visually see how close it is!
+</p>
+
+<div id="output"></div> <!-- We'll put our results here -->
 
 <script type="module">
-  // 1) Import Surreal (the JS client) and the WASM plugin from a CDN
-  import { Surreal } from "https://esm.sh/surrealdb@latest";
-  import { surrealdbWasmEngines } from "https://esm.sh/@surrealdb/wasm@latest";
+import { Surreal } from "https://esm.sh/surrealdb@latest";
+import { surrealdbWasmEngines } from "https://esm.sh/@surrealdb/wasm@latest";
 
-  // 2) Wrap our async demo logic
-  (async () => {
-    try {
-      // a) Create the SurrealDB client, enabling WASM
-      const db = new Surreal({
-        engines: surrealdbWasmEngines(),
-      });
+(async () => {
+  try {
+    // 1) Connect SurrealDB in-memory
+    const db = new Surreal({ engines: surrealdbWasmEngines() });
+    await db.connect("mem://");
+    await db.use({ namespace: "demo_ns", database: "demo_db" });
 
-      // b) Connect to an in-memory DB
-      await db.connect("mem://");
+    // 2) Insert some example data (3D "RGB" embeddings in range [0..1])
+    await db.create("color", { name: "Red",       embedding: [1, 0, 0] });
+    await db.create("color", { name: "Green",     embedding: [0, 1, 0] });
+    await db.create("color", { name: "Blue",      embedding: [0, 0, 1] });
+    await db.create("color", { name: "Pink",      embedding: [1, 0.75, 0.8] });
+    await db.create("color", { name: "Yellow",    embedding: [1, 1, 0] });
+    await db.create("color", { name: "Orange",    embedding: [1, 0.5, 0] });
+    await db.create("color", { name: "Cyan",      embedding: [0, 1, 1] });
+    await db.create("color", { name: "Magenta",   embedding: [1, 0, 1] });
+    await db.create("color", { name: "LightGray", embedding: [0.8, 0.8, 0.8] });
+    await db.create("color", { name: "DarkGray",  embedding: [0.2, 0.2, 0.2] });
 
-      // c) Choose a namespace / database
-      await db.use({
-        namespace: "demo_ns",
-        database: "demo_db",
-      });
+    // 3) We want to see how far each color is from [0.8, 0.15, 0.05].
+    //    We'll compute "squared distance" in the query,
+    //    which is enough to rank them by closeness.
+    //    (No advanced functions like SQRT needed.)
+    const [stmt] = await db.query(`
+      SELECT
+        name,
+        embedding,
+        (
+          (embedding[0] - 0.8) * (embedding[0] - 0.8)
+          + (embedding[1] - 0.15) * (embedding[1] - 0.15)
+          + (embedding[2] - 0.05) * (embedding[2] - 0.05)
+        ) AS squared_dist
+      FROM color
+      ORDER BY squared_dist ASC
+    `);
 
-      // d) Create some sample data with vectors
-      //    For example, you can imagine these are 3D embeddings
-      //    representing fruit "flavors" or some abstract semantic embedding
-      await db.create("fruit", {
-        name: "Apple",
-        embedding: [0.9, 0.1, 0.0],
-      });
-      await db.create("fruit", {
-        name: "Orange",
-        embedding: [0.7, 0.3, 0.2],
-      });
-      await db.create("fruit", {
-        name: "Banana",
-        embedding: [0.2, 0.8, 0.1],
-      });
+    // 4) Display sorted results, including a little color swatch
+    const rows = stmt || [];
+    const container = document.getElementById("output");
 
+    // Show the query color first as a reference
+    const queryColor = [0.8, 0.15, 0.05];
+    const querySwatch = makeColorSwatch(queryColor);
+    container.appendChild(querySwatch);
+    container.appendChild(document.createTextNode(
+      `  Query color [${queryColor.join(", ")}] \n\n`
+    ));
 
-// Quick test - confirm we have data
-const allFruits = await db.select("fruit");
-console.log("allFruits", allFruits);
+    rows.forEach((row, i) => {
+      // row.squared_dist might be returned as a string; parse and round as needed
+      const squared = parseFloat(row.squared_dist);
 
-      // e) Now let's define a "query vector" that we want to compare
-      //    to see which fruit is closest in embedding space
-      const queryVector = [0.8, 0.15, 0.05];
+      // We'll build a line of text: "1) Pink  (squared distance: 0.12345)"
+      let line = `${i + 1}. ${row.name}  (squared distance: ${squared.toFixed(5)})\n`;
 
-      // f) Run a vector distance query
-      //    SurrealDB typically uses:
-      //      embedding <-> $var   (Euclidean distance)
-      //      embedding <#> $var   (Cosine similarity/distance)
-      //    We'll show the Euclidean example here:
+      // Make a color swatch using row.embedding. Then create a <div> to hold it all
+      const rowDiv = document.createElement("div");
 
-      const [response] = await db.query(
-        `
-        SELECT *,
-            embedding <-> ? AS distance
-        FROM fruit
-        ORDER BY distance ASC
-        LIMIT 1
-        `,
-        {
-          vector: queryVector,
-        },
-      );
+      // Add the small color box
+      const swatch = makeColorSwatch(row.embedding);
+      rowDiv.appendChild(swatch);
 
-      // The query returns an array of results; let's get the first row
-      const closest = response[0].name ?? [];
+      // Add the text
+      rowDiv.appendChild(document.createTextNode(line));
 
-      // g) Display the outcome
-      document.getElementById("result").innerText =
-        `Query Vector: [${queryVector.join(", ")}]\n\n` +
-        `Closest match: ${closest}`;
+      container.appendChild(rowDiv);
+    });
 
-    } catch (error) {
-      console.error("Error:", error);
-      document.getElementById("result").innerText =
-        "Error:\n\n" + error.message;
-    }
-  })();
+  } catch (err) {
+    document.getElementById("output").textContent = `Error: ${err.message}`;
+  }
+
+  // Helper to create a color box from [r,g,b] in [0..1] range
+  function makeColorSwatch(embeddingArray) {
+    // Convert each channel to 0..255
+    const r = Math.round(embeddingArray[0] * 255);
+    const g = Math.round(embeddingArray[1] * 255);
+    const b = Math.round(embeddingArray[2] * 255);
+
+    const swatch = document.createElement("span");
+    swatch.style.display = "inline-block";
+    swatch.style.width = "16px";
+    swatch.style.height = "16px";
+    swatch.style.marginRight = "5px";
+    swatch.style.border = "1px solid #333";
+    swatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+    return swatch;
+  }
+})();
 </script>
 
 </body>
