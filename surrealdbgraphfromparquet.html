@@ -72,7 +72,7 @@
         /* ------------------------------------------------------------------ */
         /* 3.  LOAD FIRST N ROWS FROM PARQUET                                 */
         /* ------------------------------------------------------------------ */
-        const LIMIT = 2000;
+        const LIMIT = 10000;
         const PARQUET_URL =
             "https://pub-b1775268df954b4ea5d060e3b4cbf6cc.r2.dev/actors.parquet";
 
@@ -200,6 +200,7 @@
             `);
 
             for (const row of nextBatch) {
+                actorsExamined++;
                 const { name, knownfor } = row.toJSON();
                 let actorMovies = [];
 
@@ -213,6 +214,7 @@
 
                 const shared = actorMovies.some(m => baconMovies.includes(m));
                 if (!shared) continue;
+                actorsWithSharedMovies++;
 
                 const actorId = `actor:${safe(name)}`;
                 await sdb.query(`CREATE ${actorId} CONTENT { name: ${JSON.stringify(name)} }`).catch(() => {});
