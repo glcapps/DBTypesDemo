@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SurrealDB Live Query + Full‑Table Refresh (+Delete) Demo</title>
+  <style>
+    body  { font-family: sans-serif; margin: 2rem; }
+    h3    { margin-top: 2rem; }
+    ul    { padding-left: 1.2rem; }
+    li.msg{ padding: .25rem 0; display: flex; align-items: center; }
+    .txt  { flex: 1; }
+    .act  { font-size: .8rem; color: #666; margin-left: .5rem; }
+    button.del { margin-left: .5rem; font-size: .8rem; }
+    input[type=text]{ width: 18rem; padding: .3rem; }
+    button        { padding: .3rem .6rem; }
+  </style>
+</head>
+<body>
+
+<h2>SurrealDB Live Query Demo (WASM <code>mem://</code>)</h2>
+
+<form id="send">
+  <input id="txt" type="text" placeholder="Type a message…" autocomplete="off" />
+  <button>Add</button>
+</form>
+
+<h3>Event Stream</h3>
+<ul id="events"></ul>
+
+<h3>Current Messages (<code>SELECT * FROM message</code>)</h3>
+<ul id="snapshot"></ul>
+
+<script type="module">
+import { Surreal }              from "https://esm.sh/surrealdb@latest";
+import { surrealdbWasmEngines } from "https://esm.sh/@surrealdb/wasm@latest";
+
+(async () => {
+  // ── 1. Boot SurrealDB ────────────────────────────────────────────────────────
+  const db = new Surreal({ engines: surrealdbWasmEngines() });
+  await db.connect("mem://");
+  await db.use({ namespace: "demo_ns", database: "demo_db" });
+
+  // optional – schema‑less
+  await db.query("DEFINE TABLE message PERMISSIONS NONE");
+
+  // DOM refs
+  const listEvents   = document.getElementById("events");
+  const listSnapshot = document.getElementById("snapshot");
+
+  // helper to build an <li> for snapshot (with Delete button)
+  function makeSnapshotRow(row) {
+    const li   = document.createElement("li");
+    li.className = "msg";
+
+    const span = document.createElement("span");
+    span.className = "txt";
+    span.textContent = row.text;
+    li.appendChild(span);
+
+    const btn  = document.createElement("button");
+    btn.textContent = "Delete";
+    btn.className = "del";
+    btn.addEventListener("click", async () => {
+      // delete by record id (row.id is like "message:abc123")
+      await db.delete(row.id);
+    });
+    li.appendChild(btn);
+
+    return li;
+  }
+
+  // helper for event‑stream list
+  function makeEventRow(text, action) {
+    const li = document.createElement("li");
+    li.className = "msg";
+    li.textContent = text;
+    const span = document.createElement("span");
+    span.className = "act";
+    span.textContent = `(${action})`;
+    li.appendChild(span);
+    return li;
+  }
+
+  // ── 2. Refresh snapshot (SELECT *) ───────────────────────────────────────────
+  async function refreshSnapshot() {
+    const rows = await db.select("message");
+    rows.sort((a, b) => b.ts - a.ts);          // newest first
+    listSnapshot.innerHTML = "";
+    rows.forEach(r => listSnapshot.appendChild(makeSnapshotRow(r)));
+  }
+
+  // ── 3. Live Query callback ───────────────────────────────────────────────────
+  async function onLive(action, row) {
+    if (action === "CLOSE") return;
+
+    // a) prepend event
+    listEvents.prepend(makeEventRow(row.text ?? "(deleted)", action));
+
+    // b) refresh snapshot
+    await refreshSnapshot();
+  }
+
+  // ── 4. Start live stream ─────────────────────────────────────────────────────
+  const liveId = await db.live("message", onLive);
+
+  // ── 5. Form submit → CREATE row ──────────────────────────────────────────────
+  document.getElementById("send").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const inp = document.getElementById("txt");
+    const text = inp.value.trim();
+    if (!text) return;
+    await db.create("message", { text, ts: Date.now() });
+    inp.value = "";
+  });
+
+  // ── 6. Initial snapshot ──────────────────────────────────────────────────────
+  await refreshSnapshot();
+
+  // optional: stop after 5 min
+  setTimeout(() => db.kill(liveId), 5 * 60 * 1000);
+})();
+</script>
+
+</body>
+</html>
