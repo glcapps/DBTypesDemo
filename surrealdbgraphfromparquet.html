@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Actors ↔ Movies Graph — DuckDB + SurrealDB WASM</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 1.5rem;
+        }
+
+        #graph {
+            border: 1px solid #ccc;
+            margin-top: 1rem;
+        }
+
+        .actor {
+            fill: #4c8aff;
+        }
+
+        .movie {
+            fill: #ff9c2a;
+        }
+
+        .label {
+            font-size: .7rem;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Actors ↔ Movies (Parquet → SurrealDB WASM → D3)</h2>
+    <p>Blue = actor &nbsp;&nbsp;•&nbsp;&nbsp; Orange = movie</p>
+    <svg id="graph" style="width: 100%; height: 100vh;"></svg>
+
+    <script type="module">
+        /* ------------------------------------------------------------------ */
+        /* 1.  IMPORT LOCAL DUCKDB/ARROW MODULES                              */
+        /* ------------------------------------------------------------------ */
+        import * as arrow from "./apache-arrow-mjs.js";
+        import * as tslib from "./tslib-mjs.js";
+        import * as flatbuffers from "./flatbuffers-mjs.js";
+        import * as duckdb from "./duckdb-browser-mjs.js";
+        import { Surreal } from "https://esm.sh/surrealdb@latest";
+        import { surrealdbWasmEngines }
+            from "https://esm.sh/@surrealdb/wasm@latest";
+        import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+        /* expose for DuckDB internals */
+        window.arrow = arrow; window.tslib = tslib; window.flatbuffers = flatbuffers;
+
+        /* ------------------------------------------------------------------ */
+        /* 2.  INIT DUCKDB-WASM                                               */
+        /* ------------------------------------------------------------------ */
+        const BUNDLES = {
+            mvp: {
+                mainModule: "./duckdb-mvp.wasm",
+                mainWorker: "./duckdb-browser-mvp.worker.js"
+            }
+        };
+        const bndl = await duckdb.selectBundle(BUNDLES);
+        const worker = new Worker(bndl.mainWorker);
+        const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
+        await db.instantiate(bndl.mainModule, bndl.pthreadWorker, { arrowModule: arrow });
+        const conn = await db.connect();
+
+        /* ------------------------------------------------------------------ */
+        /* 3.  LOAD FIRST N ROWS FROM PARQUET                                 */
+        /* ------------------------------------------------------------------ */
+        const LIMIT = 2000;
+        const PARQUET_URL =
+            "https://pub-b1775268df954b4ea5d060e3b4cbf6cc.r2.dev/actors.parquet";
+
+        // Step 1: hardcoded Kevin Bacon movie list (lowercase and trimmed)
+        const baconMovies = [
+            "a few good men", "a little vicious", "apollo 13", "balto", "beauty shop",
+            "beverly hills cop: axel f", "beyond all boundaries", "black mass", "cavedweller",
+            "cop car", "crazy, stupid, love", "criminal law", "death sentence", "destination anywhere",
+            "digging to china", "diner", "elephant white", "end of the line", "enormous changes at the last minute",
+            "flatliners", "footloose", "forty deuce", "friday the 13th", "frost/nixon", "he said, she said",
+            "hero at large", "hollow man", "imagine new york", "in the cut", "jayne mansfield's car",
+            "jfk", "leave the world behind", "losing chase", "loverboy", "maxxxine", "murder in the first",
+            "my dog skip", "my one and only", "mystic river", "national lampoon's animal house",
+            "natural disasters: forces of nature", "new york skyride", "new york, i love you", "novocaine",
+            "one way", "only when i laugh", "patriots day", "picture perfect", "planes, trains and automobiles",
+            "pyrates", "queens logic", "quicksilver", "r.i.p.d.", "rails & ties", "saving angelo",
+            "she's having a baby", "skum rocks!", "sleepers", "space oddity", "starting over",
+            "stir of echoes", "super", "telling lies in america", "the air i breathe", "the air up there",
+            "the big picture", "the darkness", "the little sister", "the river wild", "the toxic avenger",
+            "the woodsman", "these vagabond shoes", "they/them", "trapped", "tremors", "we married margo",
+            "where the truth lies", "white water summer", "wild things", "x-men: first class", "you should have left"
+        ];
+
+        // Step 2: scan actors and match if any knownfor movie matches Bacon's list
+        const allActorsTable = await conn.query(`
+            SELECT name, knownfor
+            FROM read_parquet('${PARQUET_URL}') LIMIT (${LIMIT})
+        `);
+
+        const rows = [];
+        for (const row of allActorsTable) {
+            const { name, knownfor } = row.toJSON();
+            let actorMovies = [];
+
+            if (Array.isArray(knownfor)) {
+                actorMovies = knownfor.map(m => String(m).trim().toLowerCase());
+            } else if (knownfor && typeof knownfor.toString === "function") {
+                const text = knownfor.toString().trim();
+                const trimmed = text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1) : text;
+                actorMovies = trimmed.split(",").map(m => m.trim().toLowerCase());
+            }
+            
+            const shared = actorMovies.some(m => baconMovies.includes(m));
+            if (shared) rows.push([name, actorMovies]);
+            if (rows.length >= 500) break;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* 4.  INIT SURREALDB-WASM (persisted)                                */
+        /* ------------------------------------------------------------------ */
+        const sdb = new Surreal({ engines: surrealdbWasmEngines() });
+        // await sdb.connect("indxdb://movies_demo");
+        await sdb.connect("mem://");
+        await sdb.use({ namespace: "demo_ns", database: "movies_db" });
+
+        /* helper slug */
+        const slug = (str) => str.toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "");
+
+        // DuckDB + SurrealDB movie graph demo core logic (refactored for clean RELATE syntax)
+
+        const [meta] = await sdb.query("INFO FOR DB");
+        console.log("Catalog tables:", meta.tables);
+
+        if (!("actor" in (meta.tables ?? {}))) {
+            console.log("Defining 'actor', 'movie', and 'acted_in' tables...");
+            await sdb.query("DEFINE TABLE actor SCHEMALESS");
+            await sdb.query("DEFINE TABLE movie SCHEMALESS");
+            await sdb.query("DEFINE TABLE acted_in SCHEMALESS");
+        }
+
+        const safe = str => str.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+        for (const [actorName, movieArr] of rows) {
+            const actorId = `actor:${safe(actorName)}`;
+            console.log("Creating actor:", actorId);
+            await sdb.query(`CREATE ${actorId} CONTENT { name: ${JSON.stringify(actorName)} }`).catch(e => console.error("Actor create failed:", actorId, e));
+
+            for (const title of movieArr) {
+                const movieId = `movie:${safe(title)}`;
+                console.log("Creating movie:", movieId);
+                await sdb.query(`CREATE ${movieId} CONTENT { title: ${JSON.stringify(title)} }`).catch(e => console.error("Movie create failed:", movieId, e));
+
+                const relation = `RELATE ${actorId}->acted_in->${movieId}`;
+                console.log("Query string:", relation);
+                await sdb.query(relation).catch(e => console.error("Relate failed:", e));
+            }
+        }
+
+        const [actRs] = await sdb.query("SELECT id, name FROM actor");
+        const [movRs] = await sdb.query("SELECT id, title FROM movie");
+        const [edgeRs] = await sdb.query("SELECT in as movie, out as actor FROM acted_in");
+
+        console.log("Actors:", actRs);
+        console.log("Movies:", movRs);
+        console.log("Edges:", edgeRs);
+
+        const nodes = [
+            ...(actRs.result ?? actRs).map(o => ({ id: String(o.id).trim(), label: o.name, type: "actor" })),
+            ...(movRs.result ?? movRs).map(o => ({ id: String(o.id).trim(), label: o.title, type: "movie" }))
+        ];
+        console.log("Resolved node ids:", nodes.map(n => n.id));
+
+        const links = (edgeRs.result ?? edgeRs).map(e => ({
+            source: String(e.actor).trim(),
+            target: String(e.movie).trim()
+        }));
+        console.log("Link endpoints:", links);
+
+        /* ------------------------------------------------------------------ */
+        /* 7.  D3 FORCE GRAPH                                                 */
+        /* ------------------------------------------------------------------ */
+        const svg = d3.select("#graph");
+        const w = window.innerWidth, h = window.innerHeight;
+
+        const sim = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(90))
+            .force("charge", d3.forceManyBody().strength(-10))
+            .force("center", d3.forceCenter(w / 2, h / 2));
+
+        const link = svg.append("g")
+            .attr("stroke", "#555")
+            .attr("stroke-opacity", 0.8)
+            .attr("stroke-width", 1.5)
+            .selectAll("line")
+            .data(links)
+            .enter()
+            .append("line")
+            .attr("class", "link");
+
+        console.log("Link data:", links);
+
+        const node = svg.append("g")
+            .selectAll("circle").data(nodes).enter().append("circle")
+            .attr("r", 10)
+            .attr("class", d => d.type)
+            .call(drag(sim));
+
+        const label = svg.append("g")
+            .selectAll("text").data(nodes).enter().append("text")
+            .attr("class", "label")
+            .text(d => d.label);
+
+        sim.on("tick", () => {
+            link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+
+            node.attr("cx", d => d.x).attr("cy", d => d.y);
+            label.attr("x", d => d.x + 12).attr("y", d => d.y + 4);
+        });
+
+        /* drag util */
+        function drag(sim) {
+            function dragstarted(e) { if (!e.active) sim.alphaTarget(0.3).restart(); e.subject.fx = e.subject.fy = null; }
+            function dragged(e) { e.subject.fx = e.x; e.subject.fy = e.y; }
+            function dragended(e) { if (!e.active) sim.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }
+            return d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended);
+        }
+    </script>
+
+</body>
+
+</html>
