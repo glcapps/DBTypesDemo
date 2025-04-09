@@ -34,6 +34,8 @@
 
     <h2>Actors ↔ Movies (Parquet → SurrealDB WASM → D3)</h2>
     <p>Blue = actor &nbsp;&nbsp;•&nbsp;&nbsp; Orange = movie</p>
+    <p id="stats"></p>
+    <button id="load-more">Load Next Batch</button>
     <svg id="graph" style="width: 100%; height: 100vh;"></svg>
 
     <script type="module">
@@ -95,13 +97,17 @@
         ];
 
         // Step 2: scan actors and match if any knownfor movie matches Bacon's list
+        let actorsExamined = 0;
+        let actorsWithSharedMovies = 0;
+
         const allActorsTable = await conn.query(`
             SELECT name, knownfor
-            FROM read_parquet('${PARQUET_URL}') LIMIT (${LIMIT})
+            FROM read_parquet('${PARQUET_URL}') LIMIT ${LIMIT} OFFSET 6000
         `);
 
         const rows = [];
         for (const row of allActorsTable) {
+            actorsExamined++;
             const { name, knownfor } = row.toJSON();
             let actorMovies = [];
 
@@ -114,7 +120,10 @@
             }
             
             const shared = actorMovies.some(m => baconMovies.includes(m));
-            if (shared) rows.push([name, actorMovies]);
+            if (shared) {
+                rows.push([name, actorMovies]);
+                actorsWithSharedMovies++;
+            }
             if (rows.length >= 500) break;
         }
 
@@ -181,6 +190,95 @@
         }));
         console.log("Link endpoints:", links);
 
+        let offset = LIMIT + 6000;
+
+        document.getElementById("load-more").addEventListener("click", async () => {
+            offset += LIMIT;
+            const nextBatch = await conn.query(`
+                SELECT name, knownfor
+                FROM read_parquet('${PARQUET_URL}') LIMIT ${LIMIT} OFFSET ${offset}
+            `);
+
+            for (const row of nextBatch) {
+                const { name, knownfor } = row.toJSON();
+                let actorMovies = [];
+
+                if (Array.isArray(knownfor)) {
+                    actorMovies = knownfor.map(m => String(m).trim().toLowerCase());
+                } else if (knownfor && typeof knownfor.toString === "function") {
+                    const text = knownfor.toString().trim();
+                    const trimmed = text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1) : text;
+                    actorMovies = trimmed.split(",").map(m => m.trim().toLowerCase());
+                }
+
+                const shared = actorMovies.some(m => baconMovies.includes(m));
+                if (!shared) continue;
+
+                const actorId = `actor:${safe(name)}`;
+                await sdb.query(`CREATE ${actorId} CONTENT { name: ${JSON.stringify(name)} }`).catch(() => {});
+
+                for (const title of actorMovies) {
+                    const movieId = `movie:${safe(title)}`;
+                    await sdb.query(`CREATE ${movieId} CONTENT { title: ${JSON.stringify(title)} }`).catch(() => {});
+                    await sdb.query(`RELATE ${actorId}->acted_in->${movieId}`).catch(() => {});
+                }
+            }
+
+            const [actRs] = await sdb.query("SELECT id, name FROM actor");
+            const [movRs] = await sdb.query("SELECT id, title FROM movie");
+            const [edgeRs] = await sdb.query("SELECT in as movie, out as actor FROM acted_in");
+
+            svg.selectAll("*").remove();
+
+            const nodes = [
+                ...(actRs.result ?? actRs).map(o => ({ id: String(o.id).trim(), label: o.name, type: "actor" })),
+                ...(movRs.result ?? movRs).map(o => ({ id: String(o.id).trim(), label: o.title, type: "movie" }))
+            ];
+
+            const links = (edgeRs.result ?? edgeRs).map(e => ({
+                source: String(e.actor).trim(),
+                target: String(e.movie).trim()
+            }));
+
+            const sim = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(90))
+                .force("charge", d3.forceManyBody().strength(-10))
+                .force("center", d3.forceCenter(w / 2, h / 2));
+
+            const link = svg.append("g")
+                .attr("stroke", "#555")
+                .attr("stroke-opacity", 0.8)
+                .attr("stroke-width", 1.5)
+                .selectAll("line")
+                .data(links)
+                .enter()
+                .append("line")
+                .attr("class", "link");
+
+            const node = svg.append("g")
+                .selectAll("circle").data(nodes).enter().append("circle")
+                .attr("r", 10)
+                .attr("class", d => d.type)
+                .call(drag(sim));
+
+            const label = svg.append("g")
+                .selectAll("text").data(nodes).enter().append("text")
+                .attr("class", "label")
+                .text(d => d.label);
+
+            sim.on("tick", () => {
+                link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+
+                node.attr("cx", d => d.x).attr("cy", d => d.y);
+                label.attr("x", d => d.x + 12).attr("y", d => d.y + 4);
+            });
+
+            const movieCount = new Set(nodes.filter(n => n.type === "movie").map(n => n.id)).size;
+            const statsEl = document.getElementById("stats");
+            statsEl.textContent = `Actors examined: ${actorsExamined}, Co-starring with Kevin Bacon: ${actorsWithSharedMovies}, Movies shown: ${movieCount}`;
+        });
+
         /* ------------------------------------------------------------------ */
         /* 7.  D3 FORCE GRAPH                                                 */
         /* ------------------------------------------------------------------ */
@@ -222,6 +320,11 @@
             node.attr("cx", d => d.x).attr("cy", d => d.y);
             label.attr("x", d => d.x + 12).attr("y", d => d.y + 4);
         });
+
+        const movieCount = new Set(nodes.filter(n => n.type === "movie").map(n => n.id)).size;
+        const actorCount = new Set(nodes.filter(n => n.type === "actor").map(n => n.id)).size;
+        const statsEl = document.getElementById("stats");
+        statsEl.textContent = `Actors examined: ${actorsExamined}, Actors shown: ${actorCount}, Movies shown: ${movieCount}`;
 
         /* drag util */
         function drag(sim) {
