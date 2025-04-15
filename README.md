@@ -4,6 +4,9 @@ Many developers still offload data processing to their applications, missing out
 
 [Github Pages Version of DBTypesDemo](https://glcapps.github.io/DBTypesDemo/)
 
+[Github Pages Version of DBTypesDemo SurrealDb Graph from Parquet](https://glcapps.github.io/DBTypesDemo/surrealdbgraphfromparquet.html)
+[Github Pages Version of DBTypesDemo SurrealDb Live Query](https://glcapps.github.io/DBTypesDemo/surrealdbwasmlivequery.html)
+
 ### MacOs
 Docker command for Postgres Demo:
 docker run --rm --name demo-db -e POSTGRES_PASSWORD=secret -d postgres && \
