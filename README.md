@@ -11,6 +11,7 @@ Many developers still offload data processing to their applications, missing out
 [Github Pages Version of DBTypesDemo SurrealDb Vector Query](https://glcapps.github.io/DBTypesDemo/surrealdbwasm.html)
 
 ### MacOs
+```bash
 Docker command for Postgres Demo:
 echo "🛠️ Creating Docker network (if not already exists)..."
 docker network create demo-net >/dev/null 2>&1 || true
@@ -77,12 +78,13 @@ docker run --rm --name postgrest-demo --network demo-net -p 8088:3000 \
   -e PGRST_DB_SCHEMA_CACHE_TTL=0 \
   -e PGRST_CORS_ALLOWED_ORIGINS="*" \
   postgrest/postgrest
-
+```
 Test shell command: --expect json
   curl -X GET "http://127.0.0.1:8088/" -H "Accept: application/json"
 
 ### Windows
 Docker command for Postgres Demo (powershell):
+```powershell
 docker run --rm --name demo-db -e POSTGRES_PASSWORD=secret -d postgres; `
 while (!(docker exec demo-db pg_isready -U postgres)) { Start-Sleep -s 1 }; `
 docker exec demo-db psql -U postgres -c "
@@ -188,3 +190,4 @@ docker run --rm --name postgrest-demo -p 8088:3000 \
   -e PGRST_DB_SCHEMA_CACHE_TTL=0 \
   -e PGRST_CORS_ALLOWED_ORIGINS="*" \
   --link demo-db postgrest/postgrest
+```
