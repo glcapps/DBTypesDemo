@@ -138,7 +138,7 @@
                 <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(1)">Sample Query Functions</button>
                 <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(2)">Sample Query Renaming</button>
                 <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(3)">Sample Query Join Group</button>
-                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(4)">Sample Query CSV</button>
+                <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(4)">Sample Query Data Lakehouse</button>
                 <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(5)">Sample Query Join Inner</button>
             </div>
             <div id="duckdb-editor" class="h-40 border rounded bg-gray-700"></div>
@@ -223,8 +223,24 @@ FROM
     'https://shell.duckdb.org/data/tpch/0_01/parquet/nation.parquet'
 WHERE c_nationkey = n_nationkey
 GROUP BY n_name;`,
-`SELECT *
-FROM READ_CSV_AUTO('https://docs.google.com/spreadsheets/d/1fy3GbhVC8iuA9JZTqhzG3Ij_8nIn_PoZnZK2ofpZ0rs/gviz/tq?tqx=out:csv');`,
+`INSTALL ducklake;
+LOAD ducklake;
+ATTACH 'https://blobs.duckdb.org/datalake/tpch-sf1.ducklake'
+  AS tpch_sf1_ducklake
+  (TYPE ducklake);
+USE tpch_sf1_ducklake;
+SELECT
+  n.n_name,
+  count(*) AS orders,
+  sum(o.o_totalprice) AS revenue
+FROM tpch_sf1_ducklake.main.orders o
+JOIN tpch_sf1_ducklake.main.customer c
+  ON o.o_custkey = c.c_custkey
+JOIN tpch_sf1_ducklake.main.nation n
+  ON c.c_nationkey = n.n_nationkey
+GROUP BY n.n_name
+ORDER BY revenue DESC
+LIMIT 10;`,
 `SELECT p.movie_id AS "movieId", p.title, p.plain_full_script AS "fullScript"
 FROM READ_PARQUET('https://pub-b1775268df954b4ea5d060e3b4cbf6cc.r2.dev/plain_full_script.parquet') AS p
 INNER JOIN READ_CSV_AUTO('https://docs.google.com/spreadsheets/d/1fy3GbhVC8iuA9JZTqhzG3Ij_8nIn_PoZnZK2ofpZ0rs/gviz/tq?tqx=out:csv') AS c
