@@ -935,7 +935,52 @@ SELECT xpath('//title/text()', data) FROM books;`
                 // });
                 // console.log("Postgred SQL IntelliSense Enabled");
 
-                // Code block templates for the DuckDB editor (pgsql), vendored from monaco-sql-languages
+                // DuckLake-specific snippets (verified against the live engine)
+                const duckLakeSnippets = [
+                    {
+                        label: "DuckLake: Install + Load",
+                        prefix: "DUCKLAKE-INSTALL",
+                        body: ["INSTALL ducklake;", "LOAD ducklake;"]
+                    },
+                    {
+                        label: "DuckLake: Attach published catalog",
+                        prefix: "DUCKLAKE-ATTACH",
+                        body: [
+                            "ATTACH '${1:https://blobs.duckdb.org/datalake/tpch-sf1.ducklake}' AS ${2:my_ducklake} (TYPE ducklake);",
+                            "USE ${2:my_ducklake};"
+                        ]
+                    },
+                    {
+                        label: "DuckLake: Create new catalog",
+                        prefix: "DUCKLAKE-CREATE",
+                        body: [
+                            "ATTACH 'ducklake:${1:metadata.ducklake}' AS ${2:my_ducklake} (DATA_PATH '${3:data_files/}');",
+                            "USE ${2:my_ducklake};"
+                        ]
+                    },
+                    {
+                        label: "DuckLake: Snapshots (version history)",
+                        prefix: "DUCKLAKE-SNAPSHOTS",
+                        body: ["SELECT * FROM ducklake_snapshots('${1:my_ducklake}');"]
+                    },
+                    {
+                        label: "DuckLake: Table info",
+                        prefix: "DUCKLAKE-TABLE-INFO",
+                        body: ["CALL ducklake_table_info('${1:my_ducklake}');"]
+                    },
+                    {
+                        label: "DuckLake: Time travel query (AS OF version)",
+                        prefix: "DUCKLAKE-AT-VERSION",
+                        body: ["SELECT * FROM ${1:table_name} AT (VERSION => ${2:1});"]
+                    },
+                    {
+                        label: "DuckLake: Table changes between snapshots",
+                        prefix: "DUCKLAKE-TABLE-CHANGES",
+                        body: ["SELECT * FROM ducklake_table_changes('${1:my_ducklake}', '${2:main}', '${3:table_name}', ${4:1}, ${5:2});"]
+                    }
+                ];
+
+                // Code block templates for the DuckDB editor (pgsql): library snippets (monaco-sql-languages) + DuckLake helpers
                 monaco.languages.registerCompletionItemProvider("pgsql", {
                     provideCompletionItems: function (model, position) {
                         const word = model.getWordUntilPosition(position);
@@ -945,8 +990,9 @@ SELECT xpath('//title/text()', data) FROM books;`
                             startColumn: word.startColumn,
                             endColumn: word.endColumn,
                         };
+                        const allSnippets = window.pgsqlSnippets.concat(duckLakeSnippets);
                         return {
-                            suggestions: window.pgsqlSnippets.map(snippet => ({
+                            suggestions: allSnippets.map(snippet => ({
                                 label: snippet.prefix,
                                 kind: monaco.languages.CompletionItemKind.Snippet,
                                 insertText: snippet.body.join("\n"),
