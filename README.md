@@ -4,36 +4,87 @@ Many developers still offload data processing to their applications, missing out
 
 [Github Pages Version of DBTypesDemo](https://glcapps.github.io/DBTypesDemo/)
 
+[Github Pages Version of DBTypesDemo SurrealDb Graph from Parquet](https://glcapps.github.io/DBTypesDemo/surrealdbgraphfromparquet.html)
+
+[Github Pages Version of DBTypesDemo SurrealDb Live Query](https://glcapps.github.io/DBTypesDemo/surrealdbwasmlivequery.html)
+
+[Github Pages Version of DBTypesDemo SurrealDb Vector Query](https://glcapps.github.io/DBTypesDemo/surrealdbwasm.html)
+
 ### MacOs
+```bash
 Docker command for Postgres Demo:
-docker run --rm --name demo-db -e POSTGRES_PASSWORD=secret -d postgres && \
-until docker exec demo-db pg_isready -U postgres; do sleep 1; done && \
-docker exec demo-db psql -U postgres -c "
-CREATE ROLE anon NOLOGIN;
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
-CREATE OR REPLACE FUNCTION sql(query TEXT) RETURNS JSONB AS \$\$
-DECLARE
-    result JSONB;
-BEGIN
-    EXECUTE format('SELECT jsonb_agg(t) FROM (%s) t', query) INTO result;
-    RETURN COALESCE(result, '[]'::JSONB);
-END;
-\$\$ LANGUAGE plpgsql SECURITY DEFINER;
-GRANT EXECUTE ON FUNCTION sql(text) TO anon;
-" && \
-docker run --rm --name postgrest-demo -p 8088:3000 \
+echo "🛠️ Creating Docker network (if not already exists)..."
+docker network create demo-net >/dev/null 2>&1 || true
+
+echo "🚀 Starting PostgreSQL with Apache AGE base..."
+docker run -d --name demo-db --network demo-net -e POSTGRES_PASSWORD=secret apache/age
+
+echo "⏳ Waiting for PostgreSQL to become available..."
+until docker exec demo-db pg_isready -U postgres > /dev/null 2>&1; do
+  sleep 1
+done
+
+echo "🛠️ Installing PostgreSQL development tools and required extensions..."
+docker exec demo-db bash -c "apt-get update && apt-get install -y \
+    postgresql-contrib postgresql-server-dev-16 \
+    build-essential git cmake libxml2-dev libjson-c-dev flex bison gcc clang \
+    postgresql-16-pgvector"
+
+echo "🔌 Enabling PostgreSQL extensions..."
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS age;"
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS xml2;"
+docker exec demo-db psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS cube;"
+
+echo "⚙️ Configuring PostgreSQL roles and utility function..."
+docker exec demo-db psql -U postgres -c "CREATE ROLE anon NOLOGIN;"
+docker exec demo-db psql -U postgres -c "GRANT USAGE ON SCHEMA public TO anon;"
+docker exec demo-db psql -U postgres -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;"
+docker exec demo-db psql -U postgres -c \
+"CREATE OR REPLACE FUNCTION public.sql(query TEXT) RETURNS JSONB AS ' \
+DECLARE \
+    stmt TEXT; \
+    result JSONB := ''[]''::JSONB; \
+    query_array TEXT[]; \
+    temp_result JSONB; \
+    i INT; \
+BEGIN \
+    query_array := string_to_array(query, '';''); \
+    FOR i IN 1..array_length(query_array, 1) LOOP \
+        stmt := trim(query_array[i]); \
+        IF stmt <> '''' THEN \
+            IF lower(stmt) LIKE ''select%%'' THEN \
+                EXECUTE format(''SELECT jsonb_agg(t) FROM (%s) t'', stmt) INTO temp_result; \
+                result := result || COALESCE(temp_result, ''[]''::JSONB); \
+            ELSE \
+                EXECUTE stmt; \
+            END IF; \
+        END IF; \
+    END LOOP; \
+    RETURN result; \
+END; \
+' LANGUAGE plpgsql SECURITY DEFINER;"
+docker exec demo-db psql -U postgres -c "GRANT EXECUTE ON FUNCTION public.sql(TEXT) TO anon;"
+
+echo "✅ Installed PostgreSQL Extensions:"
+docker exec demo-db psql -U postgres -c "\dx"
+
+echo "🚀 Launching PostgREST..."
+docker stop postgrest-demo >/dev/null 2>&1 || true
+docker run --rm --name postgrest-demo --network demo-net -p 8088:3000 \
   -e PGRST_DB_URI="postgres://postgres:secret@demo-db/postgres" \
   -e PGRST_DB_ANON_ROLE=anon \
-  -e PGRST_DB_SCHEMAS=public \
+  -e PGRST_DB_SCHEMAS=public,ag_catalog \
+  -e PGRST_DB_SCHEMA_CACHE_TTL=0 \
   -e PGRST_CORS_ALLOWED_ORIGINS="*" \
-  --link demo-db postgrest/postgrest
-
+  postgrest/postgrest
+```
 Test shell command: --expect json
   curl -X GET "http://127.0.0.1:8088/" -H "Accept: application/json"
 
 ### Windows
 Docker command for Postgres Demo (powershell):
+```powershell
 docker run --rm --name demo-db -e POSTGRES_PASSWORD=secret -d postgres; `
 while (!(docker exec demo-db pg_isready -U postgres)) { Start-Sleep -s 1 }; `
 docker exec demo-db psql -U postgres -c "
@@ -139,3 +190,4 @@ docker run --rm --name postgrest-demo -p 8088:3000 \
   -e PGRST_DB_SCHEMA_CACHE_TTL=0 \
   -e PGRST_CORS_ALLOWED_ORIGINS="*" \
   --link demo-db postgrest/postgrest
+```
