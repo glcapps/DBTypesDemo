@@ -1018,7 +1018,8 @@ export const language = {
         ],
         strings: [
             [/'/, { token: TokenClassConsts.STRING, next: '@string' }],
-            [/"/, { token: TokenClassConsts.STRING, next: '@stringDouble' }]
+            // Double quotes denote a quoted identifier in Postgres/DuckDB, not a string literal
+            [/"/, { token: TokenClassConsts.IDENTIFIER_QUOTE, next: '@stringDouble' }]
         ],
         string: [
             [/[^']+/, TokenClassConsts.STRING_ESCAPE],
@@ -1026,9 +1027,9 @@ export const language = {
             [/'/, { token: TokenClassConsts.STRING, next: '@pop' }]
         ],
         stringDouble: [
-            [/[^"]+/, TokenClassConsts.STRING_ESCAPE],
-            [/""/, TokenClassConsts.STRING],
-            [/"/, { token: TokenClassConsts.STRING, next: '@pop' }]
+            [/[^"]+/, TokenClassConsts.IDENTIFIER_QUOTE],
+            [/""/, TokenClassConsts.IDENTIFIER_QUOTE],
+            [/"/, { token: TokenClassConsts.IDENTIFIER_QUOTE, next: '@pop' }]
         ],
         complexIdentifiers: [
             [/`/, { token: TokenClassConsts.IDENTIFIER_QUOTE, next: '@quotedIdentifier' }]
