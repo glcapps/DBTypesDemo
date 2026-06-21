@@ -48,48 +48,44 @@
         })();
     </script>
 
-    <!-- Load Apache Arrow explicitly -->
-    <script type="module">
-        import * as arrow from "https://cdn.jsdelivr.net/npm/apache-arrow@19.0.0/Arrow.es2015.min.js";
-        window.arrow = arrow;
+    <!-- Resolve the bare "apache-arrow" import inside duckdb-browser.mjs to our local copy -->
+    <script type="importmap">
+    {
+      "imports": {
+        "apache-arrow": "./scripts/apache-arrow/Arrow.dom.mjs",
+        "tslib": "./scripts/tslib/tslib.es6.mjs",
+        "flatbuffers": "./scripts/flatbuffers/mjs/flatbuffers.js"
+      }
+    }
     </script>
-    <!-- Load all dependencies locally -->
+    <!-- Load DuckDB-Wasm 1.5.2 (eh) locally -->
     <script type="module">
-        // import * as arrow from "./apache-arrow-mjs.js";   
-        import * as tslib from "./tslib-mjs.js";         
-        import * as flatbuffers from "./flatbuffers-mjs.js"; 
-        import * as duckdb from "./duckdb-browser-mjs.js";  
+        import * as duckdb from "./scripts/duckdb-wasm-1.5.2-eh/duckdb-browser.mjs";
+        import { DUCKDB_BUNDLES } from "./scripts/duckdb-wasm-1.5.2-eh/duckdb-bundles.js";
 
-        // Ensure global access to dependencies
-        window.arrow = arrow;
-        window.tslib = tslib;
-        window.flatbuffers = flatbuffers;
         window.duckdb = duckdb;
         window.duckDBReady = false; // Mark DuckDB as not ready initially
+
+        const toAbsoluteUrl = (path) => new URL(path, window.location.href).href;
 
         async function initDuckDB() {
             console.log("Initializing DuckDB...");
 
-            const MANUAL_BUNDLES = {
-                mvp: {
-                    mainModule: "./duckdb-mvp.wasm",
-                    mainWorker: "./duckdb-browser-mvp.worker.js",
-                },
-            };
-
             // Select the appropriate bundle
-            const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+            const bundle = await duckdb.selectBundle(DUCKDB_BUNDLES);
             console.log("Bundle Selected:", bundle);
 
+            // Resolve paths relative to this page, not the worker's own location
+            const mainModule = toAbsoluteUrl(bundle.mainModule);
+            const mainWorker = toAbsoluteUrl(bundle.mainWorker);
+
             // Create a worker with the correct path
-            const worker = new Worker(bundle.mainWorker);
+            const worker = new Worker(mainWorker);
             const logger = new duckdb.ConsoleLogger();
 
-            // Instantiate DuckDB with explicit Arrow module
+            // Instantiate DuckDB
             const db = new duckdb.AsyncDuckDB(logger, worker);
-            await db.instantiate(bundle.mainModule, bundle.pthreadWorker, {
-                arrowModule: window.arrow, // Ensure Apache Arrow is correctly passed
-            });
+            await db.instantiate(mainModule, bundle.pthreadWorker);
 
             console.log("DuckDB Successfully Initialized.");
             window.duckDB = db; // Store DuckDB globally
