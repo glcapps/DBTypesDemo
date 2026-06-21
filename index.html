@@ -958,6 +958,66 @@ SELECT xpath('//title/text()', data) FROM books;`
                     }
                 });
                 console.log("DuckDB SQL code block templates enabled");
+
+                // Live, engine-backed autocomplete for the DuckDB editor, using DuckDB's own sql_auto_complete()
+                monaco.languages.registerCompletionItemProvider("pgsql", {
+                    triggerCharacters: [" ", ".", ",", "("],
+                    provideCompletionItems: async function (model, position) {
+                        if (!window.duckDBReady) {
+                            return { suggestions: [] };
+                        }
+
+                        const offset = model.getOffsetAt(position);
+                        const textUpToCursor = model.getValue().slice(0, offset).replace(/'/g, "''");
+
+                        const kindMap = {
+                            keyword: monaco.languages.CompletionItemKind.Keyword,
+                            table: monaco.languages.CompletionItemKind.Struct,
+                            view: monaco.languages.CompletionItemKind.Struct,
+                            schema: monaco.languages.CompletionItemKind.Module,
+                            catalog: monaco.languages.CompletionItemKind.Module,
+                            column: monaco.languages.CompletionItemKind.Field,
+                            scalar_function: monaco.languages.CompletionItemKind.Function,
+                            aggregate_function: monaco.languages.CompletionItemKind.Function,
+                            table_function: monaco.languages.CompletionItemKind.Function,
+                            pragma: monaco.languages.CompletionItemKind.Property,
+                            setting: monaco.languages.CompletionItemKind.Property,
+                            file: monaco.languages.CompletionItemKind.File,
+                        };
+
+                        try {
+                            const conn = await window.duckDB.connect();
+                            const result = await conn.query(
+                                `SELECT * FROM sql_auto_complete('${textUpToCursor}') LIMIT 50;`
+                            );
+                            await conn.close();
+
+                            const suggestions = result.toArray().map((row) => {
+                                const r = row.toJSON();
+                                const startPos = model.getPositionAt(Number(r.suggestion_start));
+                                return {
+                                    label: r.suggestion.trim(),
+                                    kind: kindMap[r.suggestion_type] ?? monaco.languages.CompletionItemKind.Text,
+                                    insertText: r.suggestion,
+                                    detail: r.suggestion_type,
+                                    sortText: String(Number(r.suggestion_score)).padStart(5, "0"),
+                                    range: {
+                                        startLineNumber: startPos.lineNumber,
+                                        startColumn: startPos.column,
+                                        endLineNumber: position.lineNumber,
+                                        endColumn: position.column,
+                                    },
+                                };
+                            });
+
+                            return { suggestions };
+                        } catch (err) {
+                            console.warn("sql_auto_complete failed:", err);
+                            return { suggestions: [] };
+                        }
+                    }
+                });
+                console.log("DuckDB live engine autocomplete enabled");
             } else {
                 setTimeout(enableSQLIntelliSense, 100);
             }
