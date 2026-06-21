@@ -101,6 +101,12 @@
             }
 
             window.duckDBReady = true; // Mark DuckDB as ready
+
+            const runButton = document.getElementById("run-duckdb-query");
+            if (runButton) {
+                runButton.disabled = false;
+                runButton.textContent = "Run Query";
+            }
         }
 
         // Wait for DuckDB to initialize before running queries
@@ -161,7 +167,7 @@
                 <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" onclick="prefillDuckDBQuery(5)">Sample Query Join Inner</button>
             </div>
             <div id="duckdb-editor" class="h-40 border rounded bg-gray-700"></div>
-            <button class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded" onclick="runDuckDBQuery()">Run Query</button>
+            <button id="run-duckdb-query" class="mt-2 bg-green-500 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-500" onclick="runDuckDBQuery()" disabled>Initializing...</button>
             <!-- Tabs Navigation -->
             <div class="w-full max-w-3xl mx-auto">
                 <div class="flex border-b" data-tabs-toggle="#duckdb-tabs">
